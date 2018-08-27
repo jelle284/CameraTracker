@@ -169,7 +169,7 @@ void camera::adjustColors(std::vector<TrackedObject*> &pTrackedObjects) {
 				2, 8);
 		}
 		// Add text indicating trackedObject
-		cv::putText(Image, pTrackedObjects.at(COL)->getTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
+		cv::putText(Image, pTrackedObjects.at(COL)->GetTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
 		cv::imshow(winname, Image);
 
 		int k = cvWaitKey(1000 / fps);
@@ -230,7 +230,6 @@ void camera::calibrateChess() {
 	}
 
 	cv::destroyWindow(winname);
-	this->stop();
 
 	double chess_size = 2.5;
 	std::vector<cv::Point3d> model_points;

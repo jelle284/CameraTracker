@@ -14,9 +14,6 @@ MySocket::MySocket()
 		exit(EXIT_FAILURE);
 	}
 
-	// Setup timeout variable
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 100*1000;
 	strcpy_s(RHmessage, "Not Connected");
 	strcpy_s(LHmessage, "Not Connected");
 
@@ -58,15 +55,15 @@ MySocket::MySocket()
 
 MySocket::~MySocket()
 {
-	if (running) this->Stop();
+	if (b_running) this->Stop();
 	WSACleanup();
 }
 
 void MySocket::AddDevice(TrackedObject *pDevice) 
 {
-	if (strcmp(pDevice->getTag().c_str(), "HMD") == 0) pHMD = pDevice;
-	if (strcmp(pDevice->getTag().c_str(), "Right Hand Controller") == 0) pRHController = pDevice;
-	if (strcmp(pDevice->getTag().c_str(), "Left Hand Controller") == 0) pLHController = pDevice;
+	if (strcmp(pDevice->GetTag().c_str(), "HMD") == 0) pHMD = pDevice;
+	if (strcmp(pDevice->GetTag().c_str(), "Right Hand Controller") == 0) pRHController = pDevice;
+	if (strcmp(pDevice->GetTag().c_str(), "Left Hand Controller") == 0) pLHController = pDevice;
 }
 
 void MySocket::FindDevices() {
@@ -78,6 +75,10 @@ void MySocket::FindDevices() {
 	sendto(s_LeftHandController, "id", 3, 0, (struct sockaddr*)&a_LeftHandController, sizeof(a_LeftHandController));
 	sendto(s_RightHandController, "id", 3, 0, (struct sockaddr*)&a_RightHandController, sizeof(a_RightHandController));
 	
+	// Setup timeout variable
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 200 * 1000;
+
 	// Recieve messages
 	fd_set fds_copy = fds_master;
 	int socketCount = select(0, &fds_copy, NULL, NULL, &timeout);
@@ -97,19 +98,21 @@ void MySocket::FindDevices() {
 	}
 }
 
-void MySocket::SocketThread()
+void MySocket::ListenThread()
 {
 	// Initialize buffers
 	DataPacket_t DataPacket;
-	SteamMessage dataOUT;
 	char message[32];
 
 	// Run loop
-	while (running) {
+	while (b_running) {
 		// Clear buffers
 		memset((char*)(&DataPacket), '\0', sizeof(DataPacket));
-		memset((char*)(&dataOUT), '\0', sizeof(dataOUT));
 		memset(message, '\0', sizeof(message));
+
+		// Setup timeout variable
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
 
 		// Recieve data
 		fd_set fds_copy = fds_master;
@@ -156,16 +159,20 @@ void MySocket::SocketThread()
 				}
 			}
 		}
+	}
+}
+
+void MySocket::SendThread() {
+	using namespace std::chrono_literals;
+	while (b_running) {
 		if (!MessageQueue.empty()) {
 			MessageQueue.front().packetNum = packetNum;
 			sendto(s_SteamVR, (char*)(&MessageQueue.front()), sizeof(MessageQueue.front()), 0, (struct sockaddr*)&a_SteamVR, sizeof(a_SteamVR));
 			MessageQueue.pop();
-			packetNum++;
-			if (packetNum > 999) packetNum = 0;
 		}
+		std::this_thread::sleep_for(5ms);
 	}
 }
-
 void MySocket::SetColor(LED_COLORS Color)
 {
 	// TODO: specify right or left hand controller
@@ -188,14 +195,16 @@ void MySocket::SetColor(LED_COLORS Color)
 
 void MySocket::Start()
 {
-	running = true;
-	m_thread = std::thread(&MySocket::SocketThread, this);
+	b_running = true;
+	m_tListenThread = std::thread(&MySocket::ListenThread, this);
+	m_tSendThread = std::thread(&MySocket::SendThread, this);
 }
 
 void MySocket::Stop()
 {
-	running = false;
-	m_thread.join();
+	b_running = false;
+	m_tSendThread.join();
+	m_tListenThread.join();
 }
 
 void MySocket::UpdateControllers()
@@ -209,9 +218,8 @@ void MySocket::UpdateControllers()
 	}
 }
 
-void MySocket::PushQueue(SteamMessage pose)
+void MySocket::PushQueue(PoseMessage pose)
 {
 	if (MessageQueue.size() < 20) MessageQueue.push(pose);
 	else fifo_overflow_count++;
-	// TODO: fix fifo overflowing
 }

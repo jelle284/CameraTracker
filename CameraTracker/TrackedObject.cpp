@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "TrackedObject.h"
+
 /* TODO:
 	-> get rid of Activate()
 	-> finish UKF
@@ -152,9 +153,9 @@ void TrackedObject::UKFProcessFunction()
 	UKFState.tail(3) += UKFProcessNoise.tail(3);						// add noise to ang vel
 }
 
-TrackedObject::TrackedObject(std::string tag, Eigen::Vector3f Position)
+TrackedObject::TrackedObject(DeviceTag_t tag, Eigen::Vector3f Position)
 {
-	this->tag = tag;
+	m_tag = tag;
 	Color << 0, 0, 0;
 	m_bTriggerBtn = false;
 
@@ -244,14 +245,9 @@ void TrackedObject::setColor(Eigen::Vector3i Color)
 	this->Color = Color;
 }
 
-std::string TrackedObject::getTag()
+PoseMessage TrackedObject::ToSteam()
 {
-	return tag;
-}
-
-SteamMessage TrackedObject::ToSteam()
-{
-	SteamMessage s = { 0 };
+	PoseMessage s = { 0 };
 
 	s.quat_w = Orientation.w();
 	s.quat_x = Orientation.x();
@@ -267,7 +263,7 @@ SteamMessage TrackedObject::ToSteam()
 	s.vel_y = StateEstimate(4);
 	s.vel_z = StateEstimate(5);
 	s.TriggerBtn = m_bTriggerBtn;
-	strcpy(s.tag, this->tag.c_str());
+	s.tag = m_tag;
 
 	return s;
 }
@@ -301,5 +297,18 @@ void TrackedObject::SetPosition(Vector3f Pos)
 Quaternionf TrackedObject::GetOrientation()
 {
 	return Orientation;
+}
+
+std::string TrackedObject::GetTag()
+{
+	switch (m_tag) {
+	case DEVICE_TAG_HMD:
+		return std::string("HMD");
+	case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
+		return std::string("Right Hand Controller");
+	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
+		return std::string("Left Hand Controller");
+	}
+	
 }
 

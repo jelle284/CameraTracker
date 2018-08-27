@@ -15,11 +15,12 @@ private:
 	int s_RightHandController, s_LeftHandController, s_SteamVR, socketCount, slen, packetNum;
 	fd_set fds_master;
 	timeval timeout;
-	bool running, b_SendData;
-	std::thread m_thread;
+	bool b_running;
+	std::thread m_tListenThread, m_tSendThread;
 	TrackedObject *pHMD, *pRHController, *pLHController;
-	void SocketThread();
-	std::queue<SteamMessage> MessageQueue;
+	void ListenThread();
+	void SendThread();
+	std::queue<PoseMessage> MessageQueue;
 	int fifo_overflow_count;
 public:
 	char RHmessage[128], LHmessage[128];
@@ -31,6 +32,6 @@ public:
 	void Start();
 	void Stop();
 	void UpdateControllers();
-	void PushQueue(SteamMessage pose);
+	void PushQueue(PoseMessage pose);
 };
 

@@ -2,22 +2,6 @@
 
 using namespace Eigen;
 
-struct SteamMessage {
-	float
-		quat_w, quat_x, quat_y, quat_z,
-		pos_x, pos_y, pos_z,
-		vel_x, vel_y, vel_z,
-		ang_vel_x, ang_vel_y, ang_vel_z;
-	bool TriggerBtn;
-	char tag[32];
-	int packetNum;
-};
-
-struct DataPacket_t {
-	float quat[4], acc[3], gyro[3];
-	bool TriggerBtn;
-};
-
 enum LED_COLORS {
 	LED_RED,
 	LED_GREEN,
@@ -38,9 +22,9 @@ private:
 	bool m_bTriggerBtn; 
 
 	// Object information
-	std::string tag;
 	Vector3i Color; // TODO: color for each cam
 	bool b_RotationOnly;
+	DeviceTag_t m_tag;
 
 	// Zeroing
 	bool Zero;
@@ -79,7 +63,7 @@ private:
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	TrackedObject(std::string tag, Eigen::Vector3f Position);
+	TrackedObject(DeviceTag_t tag, Eigen::Vector3f Position);
 	~TrackedObject();
 
 	/* Returns object pose. [qw, qx, qy, qz, x, y, z]. */
@@ -94,11 +78,8 @@ public:
 	/* Determines color for image tracking. */
 	void setColor(Eigen::Vector3i Color);
 
-	/* Returns description of the tracked object. */
-	std::string getTag();
-
 	/* Generates data packet for openVR. */
-	SteamMessage ToSteam();
+	PoseMessage ToSteam();
 
 	/* Initializes pose time stamp. */
 	void Activate();
@@ -123,5 +104,8 @@ public:
 
 	/* Returns object orientation as quaternion. */
 	Quaternionf GetOrientation();
+
+	/* Returns tag as string. */
+	std::string GetTag();
 };
 
