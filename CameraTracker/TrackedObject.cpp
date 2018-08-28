@@ -150,7 +150,7 @@ void TrackedObject::UKFProcessFunction()
 	Qk1 = Qk*Qn*Qw;									// new quaternion
 
 	UKFState.head(4) = Vector4f(Qk1.w(), Qk1.x(), Qk1.y(), Qk1.z());	// update state vector
-	UKFState.tail(3) += UKFProcessNoise.tail(3);						// add noise to ang vel
+	UKFState.tail(3) += UKFProcessNoise.tail(3);						// add noise to angular velocity
 }
 
 TrackedObject::TrackedObject(DeviceTag_t tag, Eigen::Vector3f Position)

@@ -4,7 +4,6 @@
 MySocket::MySocket()
 {
 	packetNum = 0;
-	fifo_overflow_count = 0;
 	pHMD = nullptr;
 	pRHController = nullptr;
 	pLHController = nullptr;
@@ -162,16 +161,8 @@ void MySocket::ListenThread()
 	}
 }
 
-void MySocket::SendThread() {
-	using namespace std::chrono_literals;
-	while (b_running) {
-		if (!MessageQueue.empty()) {
-			MessageQueue.front().packetNum = packetNum;
-			sendto(s_SteamVR, (char*)(&MessageQueue.front()), sizeof(MessageQueue.front()), 0, (struct sockaddr*)&a_SteamVR, sizeof(a_SteamVR));
-			MessageQueue.pop();
-		}
-		std::this_thread::sleep_for(5ms);
-	}
+void MySocket::SendPose(PoseMessage pose) {
+	sendto(s_SteamVR, (char*)(&pose), sizeof(pose), 0, (struct sockaddr*)&a_SteamVR, sizeof(a_SteamVR));
 }
 void MySocket::SetColor(LED_COLORS Color)
 {
@@ -197,13 +188,11 @@ void MySocket::Start()
 {
 	b_running = true;
 	m_tListenThread = std::thread(&MySocket::ListenThread, this);
-	m_tSendThread = std::thread(&MySocket::SendThread, this);
 }
 
 void MySocket::Stop()
 {
 	b_running = false;
-	m_tSendThread.join();
 	m_tListenThread.join();
 }
 
@@ -216,10 +205,4 @@ void MySocket::UpdateControllers()
 	if (pRHController != nullptr) {
 		sendto(s_RightHandController, "sample", 7, 0, (struct sockaddr*)&a_RightHandController, sizeof(a_RightHandController));
 	}
-}
-
-void MySocket::PushQueue(PoseMessage pose)
-{
-	if (MessageQueue.size() < 20) MessageQueue.push(pose);
-	else fifo_overflow_count++;
 }

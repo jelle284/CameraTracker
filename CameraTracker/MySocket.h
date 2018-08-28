@@ -16,12 +16,9 @@ private:
 	fd_set fds_master;
 	timeval timeout;
 	bool b_running;
-	std::thread m_tListenThread, m_tSendThread;
+	std::thread m_tListenThread;
 	TrackedObject *pHMD, *pRHController, *pLHController;
 	void ListenThread();
-	void SendThread();
-	std::queue<PoseMessage> MessageQueue;
-	int fifo_overflow_count;
 public:
 	char RHmessage[128], LHmessage[128];
 	MySocket();
@@ -32,6 +29,6 @@ public:
 	void Start();
 	void Stop();
 	void UpdateControllers();
-	void PushQueue(PoseMessage pose);
+	void SendPose(PoseMessage pose);
 };
 

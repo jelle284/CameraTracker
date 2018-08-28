@@ -3,3 +3,4 @@ Release/
 x64/
 .vs
 CameraTracker/CameraTracker.vcxproj.user
+.yml
