@@ -131,7 +131,7 @@ cv::Point camera::DetectObject(TrackedObject* object) {
 
 // Settings related
 
-void camera::adjustColors(std::vector<TrackedObject*> &pTrackedObjects) {
+void camera::adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList) {
 
 	int	key,
 		COL = 0;
@@ -155,9 +155,9 @@ void camera::adjustColors(std::vector<TrackedObject*> &pTrackedObjects) {
 		CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_GAIN, gain);
 
 		this->ImCapture();
-		Point pt = this->DetectObject(pTrackedObjects.at(COL));
+		Point pt = this->DetectObject(DeviceList[COL]);
 
-		Eigen::Vector3i currentCol = pTrackedObjects.at(COL)->getColor();
+		Eigen::Vector3i currentCol = DeviceList[COL]->getColor();
 		// Paint points
 		if (pt.x > 0 && pt.y > 0)
 		{
@@ -169,23 +169,26 @@ void camera::adjustColors(std::vector<TrackedObject*> &pTrackedObjects) {
 				2, 8);
 		}
 		// Add text indicating trackedObject
-		cv::putText(Image, pTrackedObjects.at(COL)->GetTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
+		cv::putText(Image, DeviceList[COL]->GetTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
 		cv::imshow(winname, Image);
 
+		// escape key is pressed
 		int k = cvWaitKey(1000 / fps);
 		if (k == 32) {
 			break;
 		}
 
+		// backspace key is pressed
 		if (k == 8) {
 			COL++;
-			if (COL == pTrackedObjects.size()) COL = 0;
+			if (COL == DEVICE_COUNT) COL = 0;
 		}
 
+		// on mouse click
 		if (mouseparam.MouseUpdate) {
 			mouseparam.MouseUpdate = false;
 			Vec3b hsv = HSVImage(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
-			pTrackedObjects.at(COL)->setColor(Eigen::Vector3i(hsv.val[0], hsv.val[1], hsv.val[2]));
+			DeviceList[COL]->setColor(Eigen::Vector3i(hsv.val[0], hsv.val[1], hsv.val[2]));
 		}
 	}
 	// Destroy resources

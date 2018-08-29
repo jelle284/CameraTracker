@@ -63,7 +63,7 @@ private:
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	TrackedObject(DeviceTag_t tag, Eigen::Vector3f Position);
+	TrackedObject(DeviceTag_t tag);
 	~TrackedObject();
 
 	/* Returns object pose. [qw, qx, qy, qz, x, y, z]. */
@@ -79,7 +79,7 @@ public:
 	void setColor(Eigen::Vector3i Color);
 
 	/* Generates data packet for openVR. */
-	PoseMessage ToSteam();
+	PoseMessage_t ToSteam();
 
 	/* Initializes pose time stamp. */
 	void Activate();

@@ -39,7 +39,7 @@ public:
 	void ImCapture();
 	void calibrateChess();
 	void calibrateMouse();
-	void adjustColors(std::vector<TrackedObject*> &pTrackedObjects);
+	void adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList);
 	void start();
 	bool isRunning();
 	void stop();

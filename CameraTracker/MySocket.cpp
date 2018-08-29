@@ -4,7 +4,6 @@
 MySocket::MySocket()
 {
 	packetNum = 0;
-	pHMD = nullptr;
 	pRHController = nullptr;
 	pLHController = nullptr;
 
@@ -58,43 +57,78 @@ MySocket::~MySocket()
 	WSACleanup();
 }
 
-void MySocket::AddDevice(TrackedObject *pDevice) 
-{
-	if (strcmp(pDevice->GetTag().c_str(), "HMD") == 0) pHMD = pDevice;
-	if (strcmp(pDevice->GetTag().c_str(), "Right Hand Controller") == 0) pRHController = pDevice;
-	if (strcmp(pDevice->GetTag().c_str(), "Left Hand Controller") == 0) pLHController = pDevice;
-}
+void MySocket::FindDevices(std::array<TrackedObject*, DEVICE_COUNT>& DeviceList) {
 
-void MySocket::FindDevices() {
-	// Assume no controllers connected
-	strcpy_s(RHmessage, "Not Connected");
-	strcpy_s(LHmessage, "Not Connected");
+	bool success[DEVICE_COUNT] = { false };
 
-	// Send id request to controllers
-	sendto(s_LeftHandController, "id", 3, 0, (struct sockaddr*)&a_LeftHandController, sizeof(a_LeftHandController));
-	sendto(s_RightHandController, "id", 3, 0, (struct sockaddr*)&a_RightHandController, sizeof(a_RightHandController));
-	
-	// Setup timeout variable
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 200 * 1000;
+	// Try to get reponse from controller. Break if timeout or max number
+	for (int i = 0; i < 10; i++) {
 
-	// Recieve messages
-	fd_set fds_copy = fds_master;
-	int socketCount = select(0, &fds_copy, NULL, NULL, &timeout);
+		// If no connection success, send id request to controllers
+		if (!success[DEVICE_TAG_RIGHT_HAND_CONTROLLER])
+			sendto(s_RightHandController, "id", 3, 0, (struct sockaddr*)&a_RightHandController, sizeof(a_RightHandController));
+		if (!success[DEVICE_TAG_LEFT_HAND_CONTROLLER])
+			sendto(s_LeftHandController, "id", 3, 0, (struct sockaddr*)&a_LeftHandController, sizeof(a_LeftHandController));
 
-	for (int i = 0; i < socketCount; i++) {
-		SOCKET sock = fds_copy.fd_array[i];
-		if (sock == s_RightHandController) {
-			memset(RHmessage, '\0', sizeof(RHmessage));
-			slen = sizeof(a_RightHandController);
-			recvfrom(s_RightHandController, RHmessage, sizeof(RHmessage), 0, (struct sockaddr*)&a_RightHandController, &slen);
+		// Setup timeout variable
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+
+		// Recieve messages
+		fd_set fds_copy = fds_master;
+		int socketCount = select(0, &fds_copy, NULL, NULL, &timeout);
+
+		// If timeout disconnect controllers
+		if (socketCount == 0) {
+			if (DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER] && !success[DEVICE_TAG_RIGHT_HAND_CONTROLLER]) {
+				delete DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER];
+				DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER] = nullptr;
+				strcpy_s(RHmessage, "Not Connected");
+			}
+			if (DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER] && !success[DEVICE_TAG_LEFT_HAND_CONTROLLER]) {
+				delete DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER];
+				DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER] = nullptr;
+				strcpy_s(LHmessage, "Not Connected");
+			}
+			break;
 		}
-		if (sock == s_LeftHandController) {
-			memset(LHmessage, '\0', sizeof(LHmessage));
-			slen = sizeof(a_LeftHandController);
-			recvfrom(s_LeftHandController, LHmessage, sizeof(LHmessage), 0, (struct sockaddr*)&a_LeftHandController, &slen);
+
+		// Recieve from sockets
+		for (int i = 0; i < socketCount; i++) {
+			SOCKET sock = fds_copy.fd_array[i];
+			if (sock == s_RightHandController) {
+				memset(RHmessage, '\0', sizeof(RHmessage));
+				slen = sizeof(a_RightHandController);
+				recvfrom(s_RightHandController, RHmessage, sizeof(RHmessage), 0, (struct sockaddr*)&a_RightHandController, &slen);
+			}
+			if (sock == s_LeftHandController) {
+				memset(LHmessage, '\0', sizeof(LHmessage));
+				slen = sizeof(a_LeftHandController);
+				recvfrom(s_LeftHandController, LHmessage, sizeof(LHmessage), 0, (struct sockaddr*)&a_LeftHandController, &slen);
+			}
+		}
+
+		// Add objects in device list
+		if (strcmp(RHmessage, "Right Hand Controller") == 0) {
+			if (DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER] == nullptr) {
+				DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER] = new TrackedObject(DEVICE_TAG_RIGHT_HAND_CONTROLLER);
+				SetColor(LED_BLUE);
+			}
+			success[DEVICE_TAG_RIGHT_HAND_CONTROLLER] = true;
+		}
+
+		if (strcmp(LHmessage, "Left Hand Controller") == 0) {
+			if (DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER] == nullptr) {
+				DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER] = new TrackedObject(DEVICE_TAG_LEFT_HAND_CONTROLLER);
+				SetColor(LED_GREEN);
+			}
+			success[DEVICE_TAG_LEFT_HAND_CONTROLLER] = true;
 		}
 	}
+
+	// Assign member pointers
+	pRHController = DeviceList[DEVICE_TAG_RIGHT_HAND_CONTROLLER];
+	pLHController = DeviceList[DEVICE_TAG_LEFT_HAND_CONTROLLER];
 }
 
 void MySocket::ListenThread()
@@ -151,7 +185,7 @@ void MySocket::ListenThread()
 
 				if (strcmp(message, "Add Devices") == 0) {
 					std::stringstream ss;
-					if (pHMD != nullptr) ss << "HMD" << std::endl;
+					ss << "HMD" << std::endl; // TODO: check for HMD connection
 					if (pRHController != nullptr) ss << "Right Hand Controller" << std::endl;
 					if (pLHController != nullptr) ss << "Left Hand Controller" << std::endl;
 					sendto(s_SteamVR, ss.str().c_str(), ss.str().length(), 0, (struct sockaddr*)&a_SteamVR, sizeof(a_SteamVR));
@@ -161,9 +195,10 @@ void MySocket::ListenThread()
 	}
 }
 
-void MySocket::SendPose(PoseMessage pose) {
+void MySocket::SendPose(PoseMessage_t pose) {
 	sendto(s_SteamVR, (char*)(&pose), sizeof(pose), 0, (struct sockaddr*)&a_SteamVR, sizeof(a_SteamVR));
 }
+
 void MySocket::SetColor(LED_COLORS Color)
 {
 	// TODO: specify right or left hand controller

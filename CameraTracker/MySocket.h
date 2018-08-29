@@ -17,18 +17,17 @@ private:
 	timeval timeout;
 	bool b_running;
 	std::thread m_tListenThread;
-	TrackedObject *pHMD, *pRHController, *pLHController;
+	TrackedObject *pRHController, *pLHController;
 	void ListenThread();
 public:
 	char RHmessage[128], LHmessage[128];
 	MySocket();
 	~MySocket();
-	void AddDevice(TrackedObject *pDevice);
-	void FindDevices();
+	void FindDevices(std::array<TrackedObject*, DEVICE_COUNT>& DeviceList);
 	void SetColor(LED_COLORS Color); // TODO: multple colors for each controller
 	void Start();
 	void Stop();
 	void UpdateControllers();
-	void SendPose(PoseMessage pose);
+	void SendPose(PoseMessage_t pose);
 };
 
