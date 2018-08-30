@@ -3,6 +3,7 @@
 
 MySocket::MySocket()
 {
+	b_running = false;
 	packetNum = 0;
 	pRHController = nullptr;
 	pLHController = nullptr;
@@ -61,7 +62,7 @@ void MySocket::FindDevices(std::array<TrackedObject*, DEVICE_COUNT>& DeviceList)
 
 	bool success[DEVICE_COUNT] = { false };
 
-	// Try to get reponse from controller. Break if timeout or max number
+	// Try to get reponse from controller. Break on timeout or max number retry
 	for (int i = 0; i < 10; i++) {
 
 		// If no connection success, send id request to controllers
