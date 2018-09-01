@@ -1,9 +1,6 @@
 #include "stdafx.h"
 #include "camera.h"
 
-/* TODO:
-			optimize object detection (search in ROI)
-*/
 
 camera::camera(int n, int fps)
 {
@@ -15,6 +12,8 @@ camera::camera(int n, int fps)
 	eye = CLEyeCreateCamera(id, CLEYE_COLOR_PROCESSED, CLEYE_VGA, fps);
 	CLEyeCameraGetFrameDimensions(eye, width, height);
 	ImageBuffer = NULL;
+	m_ROI = Rect(0, 0, width, height);
+	m_ROIsize = 100;
 
 	string filename = "camera_X.yml";
 	filename.replace(7, 1, std::to_string(n_id));
@@ -97,10 +96,10 @@ CameraRay camera::RayToWorld(cv::Point pt) {
 	return CameraRay(pa, pb);
 }
 
-cv::Point camera::DetectObject(DeviceTag_t tag) {
+bool camera::DetectObject(cv::Point& pixel, DeviceTag_t tag) {
 	using namespace cv;
 	Mat bw, HSV;
-	cvtColor(cvarrToMat(pIm), HSV, CV_BGR2HSV);
+	cvtColor(cvarrToMat(pIm)(m_ROI), HSV, CV_BGR2HSV);
 	inRange(HSV,
 		Scalar(
 			max(0, Hue(tag) - thresh),
@@ -114,7 +113,32 @@ cv::Point camera::DetectObject(DeviceTag_t tag) {
 	//cv::erode(bw, bw, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
 	//cv::dilate(bw, bw, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
 	Moments M = moments(bw, true);
-	return Point(M.m10 / M.m00, M.m01 / M.m00);
+	int x = (M.m10 / M.m00);
+	int y = (M.m01 / M.m00);
+
+	// if point is on image
+	if (x > 0 &&
+		y > 0 ) {
+		x += m_ROI.x;
+		y += m_ROI.y;
+
+		pixel = Point(x, y);
+		
+		// adjust ROI
+		x = max(x - m_ROIsize, 0);
+		y = max(y - m_ROIsize, 0);
+		int w = min(2 * m_ROIsize, width - x);
+		int h = min(2 * m_ROIsize, height - y);
+		m_ROI = Rect(x, y, w, h);
+		if (m_ROIsize > 40) m_ROIsize -= 10;
+		return true;
+	}
+	else {
+		// grow ROI and select whole image
+		if (m_ROIsize < 200) m_ROIsize += 10;
+		m_ROI = Rect(0, 0, width, height);
+		return false;
+	}
 }
 
 // Settings related
@@ -144,17 +168,18 @@ void camera::adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList) 
 		Mat Im = cvarrToMat(pIm); // RGB image for imshow
 
 		// Detect and paint circles
-		for (int i = 0; i < DEVICE_COUNT; i++) {
-			if (DeviceList[i]) {
-				Point pt = this->DetectObject((DeviceTag_t)i);
-				if (pt.x > 0 && pt.y > 0)
+		for (auto &device : DeviceList) {
+			if (device) {
+				Point pt;
+				if (DetectObject(pt, device->m_tag))
 				{
 					circle(Im, pt, 20,
 						Scalar(
-							Hue(i),
-							Sat(i),
-							Val(i)),
+							Hue(device->m_tag),
+							Sat(device->m_tag),
+							Val(device->m_tag)),
 						2, 8);
+					rectangle(Im, m_ROI, Scalar(255, 0, 0), 2, 8, 0);
 				}
 			}
 		}
@@ -314,6 +339,8 @@ void camera::calibrateMouse() {
 	RotMat = rmat.t();
 	Tvec = -RotMat*tv;
 }
+
+// static
 
 void camera::on_mouse(int e, int x, int y, int d, void *ptr)
 {

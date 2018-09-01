@@ -143,14 +143,8 @@ void TrackedObject::SetTrackingMode(e_TrackingMode Mode) {
 		break;
 	case RotationOnlyMode:
 		b_RotationOnly = true;
-		StateEstimate.fill(0.0f);
 		break;
 	}
-}
-
-void TrackedObject::SetPosition(Vector3f Pos)
-{
-	StateEstimate.head(3) = Pos;
 }
 
 Eigen::Vector3i TrackedObject::getColor()
@@ -236,11 +230,6 @@ void TrackedObject::MPUUpdate(const Eigen::Vector4f& Quat, const Eigen::Vector3f
 
 void TrackedObject::Update()
 {
-	// predict next state
-	if (!b_RotationOnly) {
-		Predict();
-	}
-
 	// check for new MPU data
 	if (b_MPUUpdated) {
 		// Apply rotation offset
@@ -262,34 +251,56 @@ void TrackedObject::Update()
 		b_MPUUpdated = false;
 	}
 
-	// check for new camera data
-	if (b_CamUpdated) {
-		// -> perform KF position correction
+	if (b_RotationOnly) {
+		Matrix3f RotMat = Orientation.toRotationMatrix();
+		switch (m_tag) {
+		default:
+			// set position
+			StateEstimate.head(3) = RotMat * Vector3f(0.0f, 0.0f, -0.50f);
 
-		// State observation matrix
-		Matrix<float, 3, 6> H;
-		H <<
-			1, 0, 0, 0, 0, 0,
-			0, 1, 0, 0, 0, 0,
-			0, 0, 1, 0, 0, 0;
+			// set velocity
+			StateEstimate.tail(3) = RotMat * AngularVelocity;
+			break;
+		case DEVICE_TAG_HMD:
+			StateEstimate.fill(0.0f);
+		}
 
-		// Predicted Measurement
-		Matrix<float, 3, 1> Y;
-		Y = H * PredictedMean;
-
-		// Innovation Covariance
-		Matrix<float, 3, 3> S;
-		S = CamNoise + H * PredictedCovar*H.transpose();
-
-		// Update step
-		Matrix<float, 6, 3> KalmanGain;
-		KalmanGain = PredictedCovar * H.transpose() * S.inverse();
-		StateEstimate = PredictedMean + KalmanGain * (Camdata - Y);
-		StateCovar = PredictedCovar - KalmanGain * S * KalmanGain.transpose();
-
-		// Wait until new data is ready
-		b_CamUpdated = false;
 	}
+	else {
+		// check for new camera data
+		if (b_CamUpdated) {
+			// -> perform KF position correction
+
+			// State observation matrix
+			Matrix<float, 3, 6> H;
+			H <<
+				1, 0, 0, 0, 0, 0,
+				0, 1, 0, 0, 0, 0,
+				0, 0, 1, 0, 0, 0;
+
+			// Predicted Measurement
+			Matrix<float, 3, 1> Y;
+			Y = H * PredictedMean;
+
+			// Innovation Covariance
+			Matrix<float, 3, 3> S;
+			S = CamNoise + H * PredictedCovar*H.transpose();
+
+			// Update step
+			Matrix<float, 6, 3> KalmanGain;
+			KalmanGain = PredictedCovar * H.transpose() * S.inverse();
+			StateEstimate = PredictedMean + KalmanGain * (Camdata - Y);
+			StateCovar = PredictedCovar - KalmanGain * S * KalmanGain.transpose();
+
+			// Wait until new data is ready
+			b_CamUpdated = false;
+		}
+
+		// predict next state
+		Predict();
+	}
+	
+
 }
 
 // UKF methods

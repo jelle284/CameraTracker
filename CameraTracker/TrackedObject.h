@@ -24,7 +24,7 @@ private:
 	// Object information
 	Vector3i Color; // TODO: color for each cam
 	bool b_RotationOnly;
-	DeviceTag_t m_tag;
+	
 
 	// Zeroing
 	bool Zero;
@@ -62,6 +62,10 @@ private:
 	void UKFProcessFunction();
 
 public:
+	// Tag is public
+	DeviceTag_t m_tag;
+
+	// Constructor
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	TrackedObject(DeviceTag_t tag);
 	~TrackedObject();
@@ -98,9 +102,6 @@ public:
 
 	/* Sets the tracking mode */
 	void SetTrackingMode(e_TrackingMode Mode);
-
-	/* Sets position. Used for rotaion only tracking. */
-	void SetPosition(Vector3f Pos);
 
 	/* Returns object orientation as quaternion. */
 	Quaternionf GetOrientation();

@@ -22,7 +22,8 @@ private:
 		Tvec;		// Camera position
 
 	cv::Vec3i Hue, Sat, Val;
-
+	cv::Rect m_ROI; // region of interest
+	int m_ROIsize; // size of roi
 	// Container for mouse information
 	struct MouseParam {
 		cv::Point Position;
@@ -43,7 +44,7 @@ public:
 	bool isRunning();
 	void stop();
 	void savefile();
-	cv::Point DetectObject(DeviceTag_t tag);
+	bool DetectObject(cv::Point& point, DeviceTag_t tag);
 	CameraRay RayToWorld(cv::Point pt);
 
 	static void intersect(Vector3f &Position, CameraRay l1, CameraRay l2);
