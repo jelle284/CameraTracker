@@ -1,6 +1,6 @@
 %YAML:1.0
-Exp: 74
-Gain: 8
+Exp: 56
+Gain: 13
 camera_matrix: !!opencv-matrix
    rows: 3
    cols: 3
@@ -29,8 +29,7 @@ camera_rotation: !!opencv-matrix
        -9.4795205768835933e-01, 3.1369851030130641e-01,
        2.9852528577978538e-01, 2.8430301084525972e-01,
        9.1107324171793025e-01 ]
-color_params: !!opencv-matrix
-   rows: 0
-   cols: 0
-   dt: u
-   data: []
+Hue: [ 6, 115, 0 ]
+Saturation: [ 194, 201, 0 ]
+Value: [ 180, 61, 0 ]
+Threshold: 30

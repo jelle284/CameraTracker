@@ -1,33 +1,20 @@
 #include "stdafx.h"
 #include "camera.h"
 
-using namespace cv;
-
 /* TODO:
-			get rid of math.h
-			get rid of params
-			file store
+			optimize object detection (search in ROI)
 */
 
-void camera::on_mouse(int e, int x, int y, int d, void *ptr)
-{
-	MouseParam* mouseparam = (MouseParam*)ptr;
-	if (e == EVENT_LBUTTONDOWN && !mouseparam->MouseUpdate) {
-		mouseparam->Position = Point(x, y);
-		mouseparam->MouseUpdate = true;
-	}
-}
-
-// ============ camera class ============
 camera::camera(int n, int fps)
 {
+	using namespace cv;
 	running = false;
 	this->fps = fps;
 	this->n_id = n;
 	id = CLEyeGetCameraUUID(n);
 	eye = CLEyeCreateCamera(id, CLEYE_COLOR_PROCESSED, CLEYE_VGA, fps);
 	CLEyeCameraGetFrameDimensions(eye, width, height);
-
+	ImageBuffer = NULL;
 
 	string filename = "camera_X.yml";
 	filename.replace(7, 1, std::to_string(n_id));
@@ -38,22 +25,18 @@ camera::camera(int n, int fps)
 	fs["camera_rotation"] >> RotMat;
 	fs["Exp"] >> exposure;
 	fs["Gain"] >> gain;
-	fs["color_params"] >> Colors;
+	fs["Hue"] >> Hue;
+	fs["Saturation"] >> Sat;
+	fs["Value"] >> Val;
+	fs["Threshold"] >> thresh;
 	fs.release();
-	for (int i = 0; i < Colors.rows; i++) {
-		params.push_back({ 0, 0, 0,
-			Colors.at<int>(i,3),			// T
-			Colors.at<int>(i,4),			// H
-			Colors.at<int>(i,5),			// S
-			Colors.at<int>(i,6) });		// V
-	}
-	thresh = 30;
 }
 camera::~camera() {
 	if (this->running) stop();
 	CLEyeDestroyCamera(eye);
 }
 void camera::savefile() {
+	using namespace cv;
 	string filename = "camera_X.yml";
 	filename.replace(7, 1, std::to_string(n_id));
 	FileStorage fs(filename, FileStorage::WRITE);
@@ -63,7 +46,10 @@ void camera::savefile() {
 	fs << "distortion_coefficients" << DistCoef;
 	fs << "camera_position" << Tvec;
 	fs << "camera_rotation" << RotMat;
-	fs << "color_params" << Colors;
+	fs << "Hue" << Hue;
+	fs << "Saturation" << Sat;
+	fs << "Value" << Val;
+	fs << "Threshold" << thresh;
 	fs.release();
 }
 void camera::start() {
@@ -75,6 +61,8 @@ void camera::start() {
 
 	// Image var's
 	pIm = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 4);
+	cvGetRawData(pIm, &ImageBuffer);
+
 	CLEyeCameraStart(eye);
 	this->running = true;
 }
@@ -89,39 +77,39 @@ void camera::stop() {
 	}
 }
 
-// Tracking related
+/* 
+Tracking related
+*/
+
 void camera::ImCapture() {
 	if (!this->running) return;
-
-	PBYTE pBuf = NULL;
-	cvGetRawData(pIm, &pBuf);
-	CLEyeCameraGetFrame(eye, pBuf);
-	Image = cvarrToMat(pIm);
+	CLEyeCameraGetFrame(eye, ImageBuffer);
 }
-lin camera::RayToWorld(cv::Point pt) {
+
+CameraRay camera::RayToWorld(cv::Point pt) {
 	// transformation matrix ray 
 	// https://stackoverflow.com/questions/13957150/opencv-computing-camera-position-rotation
 	cv::Mat pixelPoint = (cv::Mat_<double>(3, 1) << pt.x, pt.y, 900);
 	cv::Mat worldPoint(3, 1, CV_64F);
 	worldPoint = RotMat*pixelPoint + Tvec;
-	vect pa(Tvec.at<double>(0, 0), Tvec.at<double>(1, 0), Tvec.at<double>(2, 0));
-	vect pb(worldPoint.at<double>(0, 0), worldPoint.at<double>(1, 0), worldPoint.at<double>(2, 0));
-	lin ray(pa, pb);
-	return ray;
+	cv::Point3d pa(Tvec.at<double>(0, 0), Tvec.at<double>(1, 0), Tvec.at<double>(2, 0));
+	cv::Point3d pb(worldPoint.at<double>(0, 0), worldPoint.at<double>(1, 0), worldPoint.at<double>(2, 0));
+	return CameraRay(pa, pb);
 }
-cv::Point camera::DetectObject(TrackedObject* object) {
-	Mat bw;
-	cvtColor(Image, HSVImage, CV_BGR2HSV);
-	Eigen::Vector3i c = object->getColor();
-	inRange(HSVImage,
+
+cv::Point camera::DetectObject(DeviceTag_t tag) {
+	using namespace cv;
+	Mat bw, HSV;
+	cvtColor(cvarrToMat(pIm), HSV, CV_BGR2HSV);
+	inRange(HSV,
 		Scalar(
-			max(0, c(0) - thresh),
-			max(0, c(1) - thresh),
-			max(0, c(2) - thresh)),
+			max(0, Hue(tag) - thresh),
+			max(0, Sat(tag) - thresh),
+			max(0, Val(tag) - thresh)),
 		Scalar(
-			min(255, c(0) + thresh),
-			min(255, c(1) + thresh),
-			min(255, c(2) + thresh)),
+			min(255, Hue(tag) + thresh),
+			min(255, Sat(tag) + thresh),
+			min(255, Val(tag) + thresh)),
 		bw);
 	//cv::erode(bw, bw, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
 	//cv::dilate(bw, bw, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
@@ -130,11 +118,9 @@ cv::Point camera::DetectObject(TrackedObject* object) {
 }
 
 // Settings related
-
 void camera::adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList) {
-
-	int	key,
-		COL = 0;
+	using namespace cv;
+	int	CurrentDeviceID = 0;
 	MouseParam mouseparam;
 
 	string winname = "camera x";
@@ -155,22 +141,27 @@ void camera::adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList) 
 		CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_GAIN, gain);
 
 		this->ImCapture();
-		Point pt = this->DetectObject(DeviceList[COL]);
+		Mat Im = cvarrToMat(pIm); // RGB image for imshow
 
-		Eigen::Vector3i currentCol = DeviceList[COL]->getColor();
-		// Paint points
-		if (pt.x > 0 && pt.y > 0)
-		{
-			circle(Image, pt, 20,
-				Scalar(
-					currentCol(0),
-					currentCol(1),
-					currentCol(2)),
-				2, 8);
+		// Detect and paint circles
+		for (int i = 0; i < DEVICE_COUNT; i++) {
+			if (DeviceList[i]) {
+				Point pt = this->DetectObject((DeviceTag_t)i);
+				if (pt.x > 0 && pt.y > 0)
+				{
+					circle(Im, pt, 20,
+						Scalar(
+							Hue(i),
+							Sat(i),
+							Val(i)),
+						2, 8);
+				}
+			}
 		}
+
 		// Add text indicating trackedObject
-		cv::putText(Image, DeviceList[COL]->GetTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
-		cv::imshow(winname, Image);
+		cv::putText(Im, DeviceList[CurrentDeviceID]->GetTag().c_str(), Point(20, 20), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0), 2.0);
+		cv::imshow(winname, Im);
 
 		// escape key is pressed
 		int k = cvWaitKey(1000 / fps);
@@ -180,22 +171,33 @@ void camera::adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList) 
 
 		// backspace key is pressed
 		if (k == 8) {
-			COL++;
-			if (COL == DEVICE_COUNT) COL = 0;
+			while (1) {
+				CurrentDeviceID++;
+				if (CurrentDeviceID == DEVICE_COUNT) CurrentDeviceID = 0;
+				if (DeviceList[CurrentDeviceID]) break;
+			}
+
 		}
 
 		// on mouse click
 		if (mouseparam.MouseUpdate) {
 			mouseparam.MouseUpdate = false;
-			Vec3b hsv = HSVImage(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
-			DeviceList[COL]->setColor(Eigen::Vector3i(hsv.val[0], hsv.val[1], hsv.val[2]));
+			Mat HSV;
+			cvtColor(cvarrToMat(pIm), HSV, CV_BGR2HSV);
+			Vec3b hsv = HSV(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
+			Hue(CurrentDeviceID) = hsv(0);
+			Sat(CurrentDeviceID) = hsv(1);
+			Val(CurrentDeviceID) = hsv(2);
 		}
 	}
+
 	// Destroy resources
 	cv::destroyWindow(winname);
 	cv::destroyWindow(ctrlname);
 }
+
 void camera::calibrateChess() {
+	using namespace cv;
 	PBYTE pBuf = NULL;
 	Mat im;
 	std::vector<cv::Point2d> chess_points;
@@ -251,7 +253,9 @@ void camera::calibrateChess() {
 	RotMat = rmat.t();
 	Tvec = -RotMat*tv;
 }
+
 void camera::calibrateMouse() {
+	using namespace cv;
 	PBYTE pBuf = NULL;
 	Mat im;
 	std::vector<cv::Point2d> mouse_points;
@@ -273,6 +277,7 @@ void camera::calibrateMouse() {
 	namedWindow(winname);
 	setMouseCallback(winname, on_mouse, &mouseparam);
 	mouseparam.MouseUpdate = false;
+
 	// Start cam
 	for (int i = 0; i < 4; i++) {
 		while (this->running) {
@@ -310,4 +315,77 @@ void camera::calibrateMouse() {
 	Tvec = -RotMat*tv;
 }
 
+void camera::on_mouse(int e, int x, int y, int d, void *ptr)
+{
+	using namespace cv;
+	MouseParam* mouseparam = (MouseParam*)ptr;
+	if (e == EVENT_LBUTTONDOWN && !mouseparam->MouseUpdate) {
+		mouseparam->Position = Point(x, y);
+		mouseparam->MouseUpdate = true;
+	}
+}
 
+void camera::intersect(Vector3f &Position, CameraRay l1, CameraRay l2)
+{
+	// c style intersect math
+	cv::Point3f p13, p21, p43, pa, pb;
+	float d1343, d4321, d1321, d4343, d2121, den, num, mua, mub;
+	float thresh = 0.001;
+	
+	p13.x = l1(0).x - l2(0).x;
+	p13.y = l1(0).y - l2(0).y;
+	p13.z = l1(0).z - l2(0).z;
+
+	p43.x = l2(1).x - l2(0).x;
+	p43.y = l2(1).y - l2(0).y;
+	p43.z = l2(1).z - l2(0).z;
+
+	//if (fabs(p43.x) < thresh & fabs(p43.y) < thresh & fabs(p43.z) < thresh)
+	//{
+	//	std::cout << "Intersect error 1" << std::endl;
+	//	return false; // error check
+	//}
+
+	p21.x = l1(1).x - l1(0).x;
+	p21.y = l1(1).y - l1(0).y;
+	p21.z = l1(1).z - l1(0).z;
+
+	//if (fabs(p21.x) < thresh & fabs(p21.y) < thresh & fabs(p21.z) < thresh)
+	//{
+	//	std::cout << "Intersect error 2" << std::endl;
+	//	return false; // error check
+	//}
+
+	d1343 = p13.x * p43.x + p13.y * p43.y + p13.z * p43.z;
+	d4321 = p43.x * p21.x + p43.y * p21.y + p43.z * p21.z;
+	d1321 = p13.x * p21.x + p13.y * p21.y + p13.z * p21.z;
+	d4343 = p43.x * p43.x + p43.y * p43.y + p43.z * p43.z;
+	d2121 = p21.x * p21.x + p21.y * p21.y + p21.z * p21.z;
+
+	den = d2121 * d4343 - d4321 * d4321;
+
+	//if (fabs(den) < thresh)
+	//{
+	//	std::cout << "Intersect error 3" << std::endl;
+	//	return false; // error check
+	//}
+
+	num = d1343 * d4321 - d1321 * d4343;
+
+	mua = num / den;
+	mub = (d1343 + d4321 * mua) / d4343;
+
+	pa.x = l1(0).x + mua * p21.x;
+	pa.y = l1(0).y + mua * p21.y;
+	pa.z = l1(0).z + mua * p21.z;
+
+	pb.x = l2(0).x + mub * p43.x;
+	pb.y = l2(0).y + mub * p43.y;
+	pb.z = l2(0).z + mub * p43.z;
+
+	Position(0) = (pa.x + pb.x) / 2;
+	Position(1) = (pa.y + pb.y) / 2;
+	Position(2) = (pa.z + pb.z) / 2;
+}
+	
+	

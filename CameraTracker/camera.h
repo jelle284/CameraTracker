@@ -2,10 +2,9 @@
 #include "opencv2/opencv.hpp"
 #include "CLEyeMulticam.h"
 
-#include "math.h"
 #include "TrackedObject.h"
 
-
+typedef cv::Vec<cv::Point3f, 2> CameraRay;
 
 class camera
 {
@@ -15,25 +14,25 @@ private:
 	GUID id;
 	CLEyeCameraInstance eye;
 	IplImage *pIm;
+	PBYTE ImageBuffer;
 	int width, height, fps, gain, exposure, thresh;
-	cv::Mat CamMat, DistCoef, RotMat, Tvec, Colors,
-			Image, HSVImage;
-	struct Param {
-		int R, G, B, T, H, S, V;
-	};
+	cv::Mat CamMat,		// camera intrinsics
+		DistCoef,	// barrel distortion coefficients
+		RotMat,		// Camera rotation matrix
+		Tvec;		// Camera position
 
-	std::vector<Param> params;
-	
+	cv::Vec3i Hue, Sat, Val;
+
+	// Container for mouse information
 	struct MouseParam {
 		cv::Point Position;
 		bool MouseUpdate;
 	} mouseparam;
 
-
+	// Mouse callback function
 	static void on_mouse(int e, int x, int y, int d, void *ptr);
+
 public:
-	lin RayToWorld(cv::Point pt);
-	cv::Point DetectObject(TrackedObject* object);
 	camera(int n, int fps);
 	~camera();
 	void ImCapture();
@@ -44,4 +43,8 @@ public:
 	bool isRunning();
 	void stop();
 	void savefile();
+	cv::Point DetectObject(DeviceTag_t tag);
+	CameraRay RayToWorld(cv::Point pt);
+
+	static void intersect(Vector3f &Position, CameraRay l1, CameraRay l2);
 };
