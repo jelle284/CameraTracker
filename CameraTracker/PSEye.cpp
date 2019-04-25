@@ -1,18 +1,20 @@
+#ifdef USE_CL_DRIVER
 #include "stdafx.h"
 #include "PSEye.h"
 
 
 PSEye::PSEye() : 
-	n_id(0)
+	n_id(0), gain(30), exposure(30)
 {
 	running = false;
 	id = CLEyeGetCameraUUID(n_id);
 	camera::settings_t settings = GetSettings();
-	
+	settings.file_id = n_id;
+
 	eye = CLEyeCreateCamera(id, CLEYE_COLOR_PROCESSED, CLEYE_VGA, 30);
 	CLEyeCameraGetFrameDimensions(eye, settings.width, settings.height);
 	SetSettings(settings);
-
+	
 	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_EXPOSURE, true);
 	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_GAIN, true);
 	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_WHITEBALANCE, true);
@@ -21,8 +23,23 @@ PSEye::PSEye() :
 }
 
 PSEye::PSEye(int n, int fps) :
-	n_id(n)
+	n_id(n), gain(30), exposure(30)
 {
+	running = false;
+	id = CLEyeGetCameraUUID(n_id);
+	camera::settings_t settings = GetSettings();
+	settings.file_id = n_id;
+
+	eye = CLEyeCreateCamera(id, CLEYE_COLOR_PROCESSED, CLEYE_VGA, fps);
+	CLEyeCameraGetFrameDimensions(eye, settings.width, settings.height);
+	SetSettings(settings);
+
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_EXPOSURE, true);
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_GAIN, true);
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_WHITEBALANCE, true);
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_HFLIP, false);
+
+	ImageBuffer = NULL;
 }
 
 
@@ -57,7 +74,7 @@ void PSEye::Adjust(const DeviceTag_t &tag)
 	createTrackbar("Exposure", ctrlname, &exposure, 511);
 	createTrackbar("Thresh", ctrlname, &settings.thresh, 120);
 	mouseparam.MouseUpdate = false;
-	
+
 	while (this->running) {
 		CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_EXPOSURE, exposure);
 		CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_GAIN, gain);
@@ -72,7 +89,7 @@ void PSEye::Adjust(const DeviceTag_t &tag)
 			circle(Im, pt, 20,
 				Scalar(255, 0, 0),
 				2, 8);
-			rectangle(Im, settings.ROI, Scalar(255, 0, 0), 2, 8, 0);
+			rectangle(Im, GetSettings().ROI, Scalar(255, 0, 0), 2, 8, 0);
 		}
 
 		cv::imshow(winname, Im);
@@ -84,10 +101,10 @@ void PSEye::Adjust(const DeviceTag_t &tag)
 		}
 
 		// on mouse click
-		if (mouseparam.MouseUpdate) {
+ 		if (mouseparam.MouseUpdate) {
 			mouseparam.MouseUpdate = false;
 			Mat HSV;
-			cvtColor(Im(settings.ROI), HSV, CV_BGR2HSV);
+			cvtColor(Im, HSV, CV_BGR2HSV);
 			Vec3b hsv = HSV(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
 			settings.Hue(tag) = hsv(0);
 			settings.Sat(tag) = hsv(1);
@@ -121,6 +138,13 @@ bool PSEye::isRunning()
 	return this->running;
 }
 
+void PSEye::ApplyUserParams()
+{
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_EXPOSURE, true);
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_GAIN, true);
+	CLEyeSetCameraParameter(eye, CLEyeCameraParameter::CLEYE_AUTO_WHITEBALANCE, true);
+}
+
 void PSEye::Stop()
 {
 	if (this->running) {
@@ -129,3 +153,5 @@ void PSEye::Stop()
 		this->running = false;
 	}
 }
+
+#endif

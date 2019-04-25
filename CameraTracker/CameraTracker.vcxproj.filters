@@ -30,9 +30,6 @@
     <ClInclude Include="camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="math.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="MySocket.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -43,6 +40,36 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Tracking_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="UKF.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HandController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HeadMountDisplay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataLogger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DeviceList.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="magdwick.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LibPSEye.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ps3eye.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ps3eye_capi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="viewer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -56,9 +83,6 @@
     <ClCompile Include="camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="math.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="MySocket.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -66,6 +90,33 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="MySerial.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="UKF.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HandController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HeadMountDisplay.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DataLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="magdwick.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LibPSEye.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ps3eye.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ps3eye_capi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="viewer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

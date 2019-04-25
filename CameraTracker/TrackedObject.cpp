@@ -1,330 +1,461 @@
 #include "stdafx.h"
 #include "TrackedObject.h"
 
-/* TODO:
-	-> get rid of Activate()
-	-> finish UKF
-*/
 
-// Basic methods
-
-TrackedObject::TrackedObject(DeviceTag_t tag)
+TrackedObject::TrackedObject(DeviceTag_t tag) :
+	m_tag(tag), m_color(LED_OFF),
+	wp(1.0f), wm(1.0f),
+	bDMP(true)
 {
-	m_tag = tag;
-	Color << 0, 0, 0;
-	m_bTriggerBtn = false;
+	cvP = cv::Mat::eye(6, 6, CV_64F);
+	cvP *= 10.0;
+	cvx = cv::Mat::zeros(6, 1, CV_64F);
 
-	// Initialize vector and matrices
-	PredictedMean.fill(0.0f);
-	PredictedCovar.setIdentity();
-
-	StateEstimate.fill(0.0f);
-	StateCovar.setIdentity();
-
-	Camdata.fill(0.0f);
-
-	// noise
-	ProcesNoiseScaling = 0.01;
-	RotOffset = Quaternionf(0.797f, -0.60f, -0.052f, 0.045f).conjugate();
-	Gravity << 0, 9.82, 0;
-	ProcesNoise.setIdentity();
-	CamNoise.setIdentity();
-	AccNoise.setIdentity();
-	ProcesNoise *= ProcesNoiseScaling;
-	CamNoise *= 0.01;
-	AccNoise *= 0.01;
-
-	// UKF
-	UKFState << 1, 0, 0, 0, 0, 0, 0;
-	UKFProcessNoise.fill(0.0f);
-}
-
-TrackedObject::~TrackedObject()
-{
-
-}
-
-void TrackedObject::zero()
-{
-	// Rotation only
-	if (b_RotationOnly) {
-		while (!b_MPUUpdated) Sleep(5);
-		RotOffset = Quaternionf(IMUdata(0), IMUdata(1), IMUdata(2), IMUdata(3)).conjugate();
-		return;
-	}
-
-	// Full tracking
-	int IMUSampleNo = 0, CamSampleNo = 0;
-	Matrix<float, 10, 100> IMU_samples;
-	Matrix<float, 3, 100> Cam_samples;
-	while (1) {
-		if (b_CamUpdated && (CamSampleNo < 100)) {
-			Cam_samples.col(CamSampleNo) = Camdata;
-			CamSampleNo++;
-		}
-		if (b_MPUUpdated && (IMUSampleNo < 100)) {
-			IMU_samples.col(IMUSampleNo) = IMUdata;
-			IMUSampleNo++;
-		}
-		if ((IMUSampleNo == 100) && (CamSampleNo == 100)) break;
-	}
-
-	// Get bias values
-	Matrix<float, 10, 1> IMU_mean = IMU_samples.rowwise().mean();
-	RotOffset = Quaternionf(IMU_mean(0), IMU_mean(1), IMU_mean(2), IMU_mean(3)).conjugate();
-	GyroBias = Vector3f(IMU_mean(4), IMU_mean(5), IMU_mean(6));
-	Gravity = Vector3f(IMU_mean(7), IMU_mean(8), IMU_mean(9));
-	
-	// Calculate covariances
-	Matrix<float, 3, 100> Acc_centered = IMU_samples.block<3, 100>(7, 0).colwise() - Gravity;
-	Matrix<float, 3, 100> Cam_centered = Cam_samples.colwise() - Cam_samples.rowwise().mean();
-
-	CamNoise = (Cam_centered * Cam_centered.adjoint()) / double(Cam_centered.cols() - 1);
-	AccNoise = (Acc_centered * Acc_centered.adjoint()) / double(Acc_centered.cols() - 1);
-}
-
-PoseMessage_t TrackedObject::ToSteam()
-{
-	PoseMessage_t PoseMessage = { 0 };
-
-	PoseMessage.quat_w = Orientation.w();
-	PoseMessage.quat_x = Orientation.x();
-	PoseMessage.quat_y = Orientation.y();
-	PoseMessage.quat_z = Orientation.z();
-	PoseMessage.ang_vel_x = AngularVelocity.x();
-	PoseMessage.ang_vel_y = AngularVelocity.y();
-	PoseMessage.ang_vel_z = AngularVelocity.z();
-	PoseMessage.pos_x = StateEstimate(0);
-	PoseMessage.pos_y = StateEstimate(1);
-	PoseMessage.pos_z = StateEstimate(2);
-	PoseMessage.vel_x = StateEstimate(3);
-	PoseMessage.vel_y = StateEstimate(4);
-	PoseMessage.vel_z = StateEstimate(5);
-	PoseMessage.ButtonState[BUTTON_TAG_TRIGGER] = m_bTriggerBtn;
-	PoseMessage.tag = m_tag;
-
-	return PoseMessage;
-}
-
-void TrackedObject::Activate()
-{
-	StateAge = std::chrono::system_clock::now();
-}
-
-void TrackedObject::ButtonUpdate(DataPacket_t &btn_data)
-{
-	m_bTriggerBtn = btn_data.TriggerBtn;
-}
-
-// Get/Set
-
-Quaternionf TrackedObject::GetOrientation()
-{
-	return Orientation;
-}
-
-std::string TrackedObject::GetTag()
-{
-	switch (m_tag) {
+	switch (tag) {
 	case DEVICE_TAG_HMD:
-		return std::string("HMD");
+		fName = "hmdfile.csv";
+		break;
 	case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
-		return std::string("Right Hand Controller");
+		fName = "rhcfile.csv";
+		break;
 	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
-		return std::string("Left Hand Controller");
-	}
-
-}
-
-void TrackedObject::SetTrackingMode(e_TrackingMode Mode) {
-	switch (Mode) {
-	case FullTrackingMode:
-		b_RotationOnly = false;
-		break;
-	case RotationOnlyMode:
-		b_RotationOnly = true;
+		fName = "lhcfile.csv";
 		break;
 	}
-}
+	
+	if (!loaddata()) {
+		Gravity << 0.0f, 9.81f, 0.0f;
+		MagBias.setZero();
+		GyroBias.setZero();
+		MagScale.fill(1.0f);
+		savedata();
+	}
 
-Eigen::Vector3i TrackedObject::getColor()
-{
-	return Color;
-}
-
-void TrackedObject::setColor(Eigen::Vector3i Color)
-{
-	this->Color = Color;
-}
-
-VectorXf TrackedObject::getCurrentPose()
-{
-	Matrix<float, 7, 1> Pose;
-	Pose << Orientation.w(), Orientation.x(), Orientation.y(), Orientation.z(), StateEstimate.head(3);
-	return Pose;
-}
-
-// KF methods
-
-void TrackedObject::Predict()
-{
-	// current time
-	auto CurrentTime = std::chrono::system_clock::now();
-	std::chrono::duration<float> elapsed_seconds = CurrentTime - StateAge;
-	float dt = elapsed_seconds.count();
-	float dt2 = 0.5*dt*dt;
-
-	// State Transition Matrix
-	Matrix<float, 6, 6> F;
-	F <<
+	// camera / position filter
+	float dt = 0.033;
+	A <<
 		1, 0, 0, dt, 0, 0,
 		0, 1, 0, 0, dt, 0,
 		0, 0, 1, 0, 0, dt,
 		0, 0, 0, 1, 0, 0,
 		0, 0, 0, 0, 1, 0,
 		0, 0, 0, 0, 0, 1;
-
-	// Input matrix
-	Matrix<float, 6, 3> B;
+	Pk.setIdentity();
 	B <<
-		dt2, 0, 0,
-		0, dt2, 0,
-		0, 0, dt2,
-		dt, 0, 0,
-		0, dt, 0,
-		0, 0, dt;
+		0.5*dt*dt, 0, 0,
+		0, 0.5*dt*dt, 0,
+		0, 0, 0.5*dt*dt,
+		0, 0, 0,
+		0, 0, 0,
+		0, 0, 0;
 
-	// prediction step
-	PredictedMean = F * StateEstimate + B * Acceleration;
-	PredictedCovar = F * StateCovar*F.transpose() + ProcesNoise + B * AccNoise*B.transpose();
-	StateAge = CurrentTime;
+	u.setZero();
+
+	for (int i = 0; i < 3; ++i) {
+		m_pose.ang_vel[i] = 0.0f;
+		m_pose.vel[i] = 0.0f;
+		m_pose.pos[i] = 0.0f;
+	}
+	m_pose.q[0] = 1.0f;
+	m_pose.q[1] = 0.0f;
+	m_pose.q[2] = 0.0f;
+	m_pose.q[3] = 0.0f;
+	q_zero.setIdentity();
 }
 
-void TrackedObject::CamUpdate(const Eigen::Vector3f& Pos)
+TrackedObject::~TrackedObject()
 {
-	// outlier detection
-	if (Pos.norm() > 500) return;
-
-	// convert cm to m
-	this->Camdata = Pos * 0.01;
-
-	// Notify that data has been updated
-	b_CamUpdated = true;
-
-	// -> mutex
 }
 
-void TrackedObject::MPUUpdate(const Eigen::Vector4f& Quat, const Eigen::Vector3f& Accelerometer, const Eigen::Vector3f& Gyro)
-{
-	// outlier detection
-	if (Quat.norm() < 0.9 || Quat.norm() > 1.1) return;
-	if (Accelerometer.norm() > 15) return;
-	if (Gyro.norm() > 3) return;
+std::wstring TrackedObject::PrintPose(){
+	std::wstringstream ss;
 
-	// Store data
-	IMUdata << Quat, Gyro, Accelerometer;
+	//std::wstring name = PrintTag();
+	//Eigen::Matrix<float, 16, 1> currentPose = m_filter.GetState();
+	//ss << name << ": \n" <<
+	//	"Position: (" <<
+	//	std::to_wstring(currentPose(0)) << ", " <<
+	//	std::to_wstring(currentPose(1)) << ", " <<
+	//	std::to_wstring(currentPose(2)) << ")\n " <<
+	//	"Q: (" <<
+	//	std::to_wstring(currentPose(15)) << ", " <<
+	//	std::to_wstring(currentPose(12)) << ", " <<
+	//	std::to_wstring(currentPose(13)) << ", " <<
+	//	std::to_wstring(currentPose(14)) << ")\n";
 
-	// Notify that data has been updated
-	b_MPUUpdated = true;
+	//Eigen::Matrix<float, 7, 1> currentPose = m_qfilter.getState();
+	//ss << PrintTag() << ": \n" <<
+	//	"Q: (" <<
+	//	std::to_wstring(currentPose(3)) << ", " <<
+	//	std::to_wstring(currentPose(0)) << ", " <<
+	//	std::to_wstring(currentPose(1)) << ", " <<
+	//	std::to_wstring(currentPose(2)) << ")\n";
+
+	ss << PrintTag() << ": \n" <<
+	"Q: (" <<
+	std::to_wstring(m_pose.q[0]) << ", " <<
+	std::to_wstring(m_pose.q[1]) << ", " <<
+	std::to_wstring(m_pose.q[2]) << ", " <<
+	std::to_wstring(m_pose.q[3]) << ")\n";
+	ss << "pos: " << m_pose.pos[0] << ", " << m_pose.pos[1] << ", " << m_pose.pos[2] << std::endl;
+
+	return ss.str();
 }
 
-void TrackedObject::Update()
+std::wstring TrackedObject::PrintTag()
 {
-	// check for new MPU data
-	if (b_MPUUpdated) {
-		// Apply rotation offset
-		Orientation = RotOffset * Quaternionf(IMUdata(0), IMUdata(1), IMUdata(2), IMUdata(3));
+	std::wstring name;
 
-		// Rotation matrix from local to global coordinates
-		Matrix3f RotMat = Orientation.conjugate().toRotationMatrix();
-
-		// Transform acceleration and remove gravity
-		Acceleration = RotMat * Vector3f(IMUdata(7), IMUdata(8), IMUdata(9)) - Gravity;
-
-		// Transform angular velocity
-		AngularVelocity = RotMat * Vector3f(IMUdata(4), IMUdata(5), IMUdata(6));
-
-		// -> perform UKF orientation correction
-		//UKFProcessFunction();
-
-		// Wait until new data is ready
-		b_MPUUpdated = false;
+	switch (m_tag) {
+	case DEVICE_TAG_HMD:
+		name = L"HMD";
+		break;
+	case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
+		name = L"Right Hand Controller";
+		break;
+	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
+		name = L"Left Hand Controller";
+		break;
 	}
 
-	if (b_RotationOnly) {
-		Matrix3f RotMat = Orientation.toRotationMatrix();
-		switch (m_tag) {
-		default:
-			// set position
-			StateEstimate.head(3) = RotMat * Vector3f(0.0f, 0.0f, -0.50f);
+	return name;
+}
 
-			// set velocity
-			StateEstimate.tail(3) = RotMat * AngularVelocity;
-			break;
-		case DEVICE_TAG_HMD:
-			StateEstimate.fill(0.0f);
+std::wstring TrackedObject::PrintScaledIMU()
+{
+	std::wstringstream ss;
+	imu_packet_t imu_packet;
+	WriteData("imu", 4);
+	ReadData((char*)&imu_packet, sizeof(imu_packet));
+	auto acc_gyro_mag = ScaleRawData(imu_packet);
+	ss << PrintTag() << std::endl;
+	ss.precision(3);
+	ss << std::fixed;
+	ss << acc_gyro_mag(0) << "\t " << acc_gyro_mag(1) << "\t " << acc_gyro_mag(2) << std::endl;
+	ss << acc_gyro_mag(3) << "\t " << acc_gyro_mag(4) << "\t " << acc_gyro_mag(5) << std::endl;
+	ss << acc_gyro_mag(6) << "\t " << acc_gyro_mag(7) << "\t " << acc_gyro_mag(8) << std::endl;
+
+	Eigen::Quaternionf q;
+	Eigen::Vector3f gref;
+	gref << 0.6f, 9.81f, 2.2f;
+	q.setFromTwoVectors(gref, acc_gyro_mag.head<3>());
+	ss << "Qg: (" <<
+		std::to_wstring(q.w()) << ", " <<
+		std::to_wstring(q.x()) << ", " <<
+		std::to_wstring(q.y()) << ", " <<
+		std::to_wstring(q.z()) << ")\n";
+
+	Eigen::Vector3f mref;
+	mref << -26.0f, 21.0f, -18.0f;
+	q.setFromTwoVectors(mref, acc_gyro_mag.head<3>());
+	ss << "Qm: (" <<
+		std::to_wstring(q.w()) << ", " <<
+		std::to_wstring(q.x()) << ", " <<
+		std::to_wstring(q.y()) << ", " <<
+		std::to_wstring(q.z()) << ")\n";
+	return ss.str();
+}
+
+Eigen::Matrix<float, 9, 1> TrackedObject::ScaleRawData(imu_packet_t imu_packet)
+{
+	Eigen::Matrix<float, 9, 1> acc_gyro_mag;
+	acc_gyro_mag.setZero();
+
+	// accelerometer range 2g
+	float acc_gain = 9.81f * 2 / 32767;
+	acc_gyro_mag(0) = (float)(imu_packet.ax) * acc_gain;
+	acc_gyro_mag(1) = (float)(imu_packet.ay) * acc_gain;
+	acc_gyro_mag(2) = (float)(imu_packet.az) * acc_gain;
+
+	// gyro range 250 deg/s
+	float gyro_gain = 250.0f / 32767;
+	acc_gyro_mag(3) = (float)(imu_packet.gx) * gyro_gain;
+	acc_gyro_mag(4) = (float)(imu_packet.gy) * gyro_gain;
+	acc_gyro_mag(5) = (float)(imu_packet.gz) * gyro_gain;
+
+	// mag range 40 µtesla
+	float mag_gain = 40.0f / 32767;
+	acc_gyro_mag(6) = (float)(imu_packet.mx) * mag_gain * MagScale(0);
+	acc_gyro_mag(7) = (float)(imu_packet.my) * mag_gain * MagScale(1);
+	acc_gyro_mag(8) = (float)(imu_packet.mz) * mag_gain * MagScale(2);
+
+	acc_gyro_mag.segment(3, 3) -= GyroBias;
+	acc_gyro_mag.tail(3) -= MagBias;
+
+	return acc_gyro_mag;
+}
+
+void TrackedObject::TimerCallbackIMU()
+{
+	
+	if (bDMP) {
+		HmdQuaternionf_t quat;
+		WriteData("dmp", 4);
+		if (ReadData((char*)&quat, sizeof(quat)) == sizeof(quat)) {
+			Eigen::Quaternionf q = q_zero * Eigen::Quaternionf(quat.w, quat.x, quat.y, quat.z);
+			m_pose.q[0] = q.w();
+			m_pose.q[1] = q.x();
+			m_pose.q[2] = q.y();
+			m_pose.q[3] = q.z();
+			if (m_bZero) {
+				q_zero = Eigen::Quaternionf(quat.w, quat.x, quat.y, quat.z).conjugate();
+				m_bZero = false;
+			}
 		}
-
 	}
 	else {
-		// check for new camera data
-		if (b_CamUpdated) {
-			// -> perform KF position correction
+		imu_packet_t imu_packet = { 0 };
+		WriteData("imu", 4);
+		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
+			auto acc_gyro_mag = ScaleRawData(imu_packet);
 
-			// State observation matrix
-			Matrix<float, 3, 6> H;
-			H <<
-				1, 0, 0, 0, 0, 0,
-				0, 1, 0, 0, 0, 0,
-				0, 0, 1, 0, 0, 0;
+			// magdwick algorithm:
+			AHRS.timing();
+			AHRS.update(
+				acc_gyro_mag(3), acc_gyro_mag(4), acc_gyro_mag(5),
+				acc_gyro_mag(0), acc_gyro_mag(1), acc_gyro_mag(2),
+				acc_gyro_mag(6), acc_gyro_mag(7), acc_gyro_mag(8)
+			);
 
-			// Predicted Measurement
-			Matrix<float, 3, 1> Y;
-			Y = H * PredictedMean;
+			Eigen::Quaternionf q = q_zero * Eigen::Quaternionf(AHRS.q0, AHRS.q1, AHRS.q2, AHRS.q3);
 
-			// Innovation Covariance
-			Matrix<float, 3, 3> S;
-			S = CamNoise + H * PredictedCovar*H.transpose();
+			m_pose.q[0] = q.w();
+			m_pose.q[1] = q.x();
+			m_pose.q[2] = q.y();
+			m_pose.q[3] = q.z();
 
-			// Update step
-			Matrix<float, 6, 3> KalmanGain;
-			KalmanGain = PredictedCovar * H.transpose() * S.inverse();
-			StateEstimate = PredictedMean + KalmanGain * (Camdata - Y);
-			StateCovar = PredictedCovar - KalmanGain * S * KalmanGain.transpose();
-
-			// Wait until new data is ready
-			b_CamUpdated = false;
+			if (m_bZero) {
+				q_zero = Eigen::Quaternionf(AHRS.q0, AHRS.q1, AHRS.q2, AHRS.q3).conjugate();
+				m_bZero = false;
+			}
 		}
-
-		// predict next state
-		Predict();
 	}
-	
-
 }
 
-// UKF methods
-
-void TrackedObject::UKFProcessFunction()
+void TrackedObject::TimerCallbackCam(camera& cam)
 {
-	// current time
-	auto CurrentTime = std::chrono::system_clock::now();
-	std::chrono::duration<float> elapsed_seconds = CurrentTime - StateAge;
-	float dt = elapsed_seconds.count();
+	const int n = 6;
+	using namespace Eigen;
+	cv::Point pixel;
+	cv::Mat im = cam.FrameCapture();
+	if (cam.DetectObject(pixel, m_tag, im)) {
+		VectorXf x_ = A * x + B * u;
+		MatrixXf Pk_ = A * Pk * A.transpose() + MatrixXf::Identity(n,n) * wp;
+		MatrixXf S = (Pk_ + MatrixXf::Identity(n, n) * wm).llt().matrixL();
+		MatrixXf Y(n, 2 * n);
+		for (int i = 0; i < n; ++i) {
+			Y.col(i) = x_ + S.col(i);
+			Y.col(i + n) = x_ - S.col(i);
+		}
+		MatrixXf Z(2, 2 * n);
+		for (int i = 0; i < 2 * n; ++i) {
+			Vector4f hPos;
+			hPos << Y.col(i).tail(3), 1;
+			Vector3f zi = cam.CameraModel.m_Intrinsics * cam.CameraModel.m_Extrinsics * hPos;
+			Z.col(i)(0) = zi(0) / zi(2);
+			Z.col(i)(1) = zi(1) / zi(2);
+		}
+		Vector2f z = Z.rowwise().mean();
 
-	Quaternionf Qk, Qk1, Qw, Qn;
-	Qk = Quaternionf(UKFState(0), UKFState(1), UKFState(2), UKFState(3)); // current orientation
+		Matrix2f Pzz;
+		Pzz.setZero();
+		MatrixXf Pxz(n, 2);
+		Pxz.setZero();
 
-	float angle = UKFState.tail(3).norm()*dt;		// angle turn in time step
-	Vector3f Axis = UKFState.tail(3).normalized();	// axis of angular velocity
-	Qw = Quaternionf(AngleAxisf(angle, Axis));		// angular velocity quaternion
+		for (int i = 0; i < 2 * n; ++i) {
+			Vector2f error = Z.col(i) - z;
+			Pzz += error * error.transpose();
+			Pxz += (Y.col(i) - x_) * error.transpose();
+		}
+		Pzz *= 1.0f / (2 * n);
+		Pxz *= 1.0f / (2 * n);
+		Vector2f v;
+		v << pixel.x - z(0), pixel.y - z(1);
+		MatrixXf K = Pxz * Pzz.inverse();
+		x = x_ + K * v;
+		Pk = Pk_ - K * Pzz*K.transpose();
 
-	angle = UKFProcessNoise.head(3).norm();			// angle of noise
-	Axis = UKFProcessNoise.head(3);					// axis of noise
-	Qn = Quaternionf(AngleAxisf(angle, Axis));		// noise quaternion
+		for (int i = 0; i < 3; ++i) {
+			m_pose.vel[i]	=	x(i);
+			m_pose.pos[i]	=	x(i + 3);
+		}
+	}
+}
 
-	Qk1 = Qk * Qn*Qw;									// new quaternion
+bool TrackedObject::HandShake()
+{
+	for (int i = 0; i < 5; i++) {
+		WriteData("id", 3);
+		Sleep(200);
+		char buf[64] = { 0 };
+		if (ReadData(buf, sizeof(buf)) > 0) {
+			switch (m_tag) {
+			case DEVICE_TAG_HMD:
+				if (strcmp(buf, "Head Mounted Display") == 0)
+					return true;
+			case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
+				if (strcmp(buf, "Right Hand Controller") == 0)
+					return true;
+			case DEVICE_TAG_LEFT_HAND_CONTROLLER:
+				if (strcmp(buf, "Left Hand Controller") == 0)
+					return true;
+			}
+		}
+	}
+	return false;
+}
 
-	UKFState.head(4) = Vector4f(Qk1.w(), Qk1.x(), Qk1.y(), Qk1.z());	// update state vector
-	UKFState.tail(3) += UKFProcessNoise.tail(3);						// add noise to angular velocity
+void TrackedObject::SetColor(eLED_COLOR color)
+{
+	switch (color) {
+	case LED_RED:
+		WriteData("red", 4);
+		break;
+	case LED_BLUE:
+		WriteData("blue", 5);
+		break;
+	case LED_GREEN:
+		WriteData("green", 6);
+		break;
+	case LED_OFF:
+		WriteData("off", 4);
+		break;
+	}
+}
+
+void TrackedObject::Zero()
+{
+	m_bZero = true;
+	//WriteData("zero", 5);
+	
+}
+
+void TrackedObject::ColorTagWS(WCHAR * buf)
+{
+	if (_tcsicmp(buf, L"RED") == 0) {
+		m_color =  LED_RED;
+	}
+	if (_tcsicmp(buf, L"GREEN") == 0) {
+		m_color = LED_GREEN;
+	}
+	if (_tcsicmp(buf, L"BLUE") == 0) {
+		m_color = LED_BLUE;
+	}
+}
+
+void TrackedObject::ToggleLED(bool status)
+{
+	for (int i = 0; i < 5; i++) {
+		status ? SetColor(m_color) : SetColor(LED_OFF);
+		Sleep(5);
+	}
+}
+
+PoseMessage_t TrackedObject::GetPose()
+{
+	PoseMessage_t PoseMessage;
+	PoseMessage.tag = m_tag;
+	PoseMessage.pose = m_pose;
+	return PoseMessage;
+}
+
+void TrackedObject::savedata()
+{
+	std::ofstream ofs(fName);
+	MagBias.setZero();
+	ofs << MagBias(0) << "," << MagBias(1) << "," << MagBias(2) << ";\n";
+	ofs << MagScale(0) << "," << MagScale(1) << "," << MagScale(2) << ";\n";
+	ofs << GyroBias(0) << "," << GyroBias(1) << "," << GyroBias(2) << ";\n";
+	ofs << Gravity(0) << "," << Gravity(1) << "," << Gravity(2) << ";\n";
+	ofs.close();
+}
+
+bool TrackedObject::loaddata()
+{
+	bool bSuccess = false;
+	std::ifstream ifs(fName);
+	int i = 0, j = 0;
+	float fVal;
+	while (ifs.good()) {
+		ifs >> fVal;
+		char delim;
+		switch (j) {
+		case 0:
+			MagBias(i) = fVal;
+			break;
+		case 1:
+			MagScale(i) = fVal;
+			break;
+		case 2:
+			GyroBias(i) = fVal;
+			break;
+		case 3:
+			Gravity(i) = fVal;
+			if (i == 2) bSuccess = true;
+			break;
+		}
+		ifs >> delim;
+		if (delim == ',') ++i;
+		if (delim == ';') { i = 0; ++j; }
+	}
+	ifs.close();
+	return bSuccess;
+}
+
+void TrackedObject::CalibrateMag()
+{
+	const int sample_len = 150;
+	using namespace Eigen;
+	Matrix<float, 9, sample_len> buffer;
+	int i = 0, j = 0;
+	MagBias.setZero();
+	MagScale.fill(1.0f);
+	while (j < 2*sample_len) {
+		imu_packet_t imu_packet;
+		WriteData("imu", 4);
+		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
+			auto acc_gyro_mag = ScaleRawData(imu_packet);
+			buffer.col(i) = acc_gyro_mag;
+			i++;
+			if (i == sample_len) {
+				auto mag_max = buffer.rowwise().maxCoeff().segment(6, 3);
+				auto mag_min = buffer.rowwise().minCoeff().segment(6, 3);
+				MagBias = (mag_max + mag_min) / 2;
+				MagScale = (mag_max - mag_min) / 2;
+				for (int i = 0; i<3; ++i)
+					MagScale(i) = MagScale.mean() / MagScale(i);
+				savedata();
+				break;
+			}
+		}
+		j++;
+		Sleep(80);
+	}
+}
+
+void TrackedObject::CalibrateAccGyro()
+{
+	const int sample_len = 100;
+	using namespace Eigen;
+	Matrix<float, 9, sample_len> buffer;
+	GyroBias.setZero();
+	Gravity << 0.0f, 9.81f, 0.0f;
+	int i = 0, j = 0;
+	while (j < 2 * sample_len) {
+		imu_packet_t imu_packet;
+		WriteData("imu", 4);
+		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
+			auto acc_gyro_mag = ScaleRawData(imu_packet);
+			buffer.col(i) = acc_gyro_mag;
+			i++;
+			if (i == sample_len) {
+				GyroBias = acc_gyro_mag.segment(3, 3).rowwise().mean();
+				Gravity = acc_gyro_mag.head(3).rowwise().mean();
+				savedata();
+				break;
+			}
+		}
+		j++;
+		Sleep(20);
+	}
 }
