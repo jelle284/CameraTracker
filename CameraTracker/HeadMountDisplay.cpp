@@ -2,41 +2,72 @@
 #include "HeadMountDisplay.h"
 
 
-
-
 HeadMountDisplay::HeadMountDisplay() :
 	TrackedObject(DEVICE_TAG_HMD),
-	COM(L"COM3")
+	K1(0.95f), K2(0.98f), zW(0.85f), zH(1.0f), IPD(0.067)
 {
+	WCHAR *port[] = { L"COM3", L"COM6" };
+	for (int i = 0; i < 2; i++) {
+		MySerial* CurrentPort = new MySerial(port[i]);
+		if (CurrentPort->IsConnected()) {
+			pCOM = CurrentPort;
+			portname = std::wstring(port[i]);
+			break;
+		}
+		else {
+			delete CurrentPort;
+		}
+	}
+	m_color = LED_RED;
 }
-
 
 HeadMountDisplay::~HeadMountDisplay()
 {
 }
 
-void HeadMountDisplay::SetColor(LED_COLORS color)
+void HeadMountDisplay::ChangeCOM(std::wstring port)
 {
-	switch (color) {
-	default:
-		COM.WriteData("R", 2);
-		break;
-	case LED_OFF:
-		COM.WriteData("n", 2);
-		break;
-	}
+	delete pCOM;
+	pCOM = new MySerial(port.c_str());
 }
 
-Eigen::Matrix<float, 9, 1> HeadMountDisplay::IMUProvider()
+
+std::wstring HeadMountDisplay::PrintRawData()
 {
-	COM.WriteData("s", 2);
-	DataPacket_t data;
-	COM.ReadData((char*)(&data), sizeof(data));
-	Eigen::Matrix<float, 9, 1> Edata = Eigen::Map<Eigen::Matrix<float, 9, 1>>(data.acc_gyro_mag);
-	return Edata;
+	imu_packet_t imu_packet;
+	std::wstringstream ss;
+
+	WriteData("imu", 4);
+	ReadData((char*)&imu_packet, sizeof(imu_packet));
+
+	ss << PrintTag() << std::endl;
+	ss << "imu: "
+		<< imu_packet.ax << ", " << imu_packet.ay << ", " << imu_packet.az << std::endl
+		<< imu_packet.gx << ", " << imu_packet.gy << ", " << imu_packet.gz << std::endl
+		<< imu_packet.mx << ", " << imu_packet.my << ", " << imu_packet.mz << std::endl;
+
+	return ss.str();
+
 }
 
-bool HeadMountDisplay::ConnectionProvider()
+int HeadMountDisplay::ReadData(char * buffer, unsigned int nbChar)
 {
-	return COM.IsConnected();
+	int res = pCOM->ReadData(buffer, nbChar);
+	return res;
+}
+
+bool HeadMountDisplay::WriteData(const char * buffer, unsigned int nbChar)
+{
+	bool res = pCOM->WriteData(buffer, nbChar);
+	return res;
+}
+
+PoseMessage_t HeadMountDisplay::GetPose()
+{
+	PoseMessage_t PoseMessage;
+	PoseMessage.tag = m_tag;
+	PoseMessage.pose = m_pose;
+	PoseMessage.pose.q[1] *= -1;
+	PoseMessage.pose.q[3] *= -1;
+	return PoseMessage;
 }

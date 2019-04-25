@@ -1,112 +1,83 @@
 #pragma once
+#include "UKF.h"
+#include "camera.h"
+#include "MySocket.h"
+#include "magdwick.h"
 
-using namespace Eigen;
-
-enum LED_COLORS {
+enum eLED_COLOR {
 	LED_RED,
 	LED_GREEN,
 	LED_BLUE,
 	LED_OFF
 };
 
-enum e_TrackingMode {
-	RotationOnlyMode,
-	FullTrackingMode
-};
-
 class TrackedObject
 {
 private:
+	std::string fName; // filename of saved data
 
-	// Buttons
-	bool m_bTriggerBtn; 
-
-	// Object information
-	Vector3i Color; // TODO: color for each cam
-	bool b_RotationOnly;
+	//UKF::Estimator m_filter;
+	//UKF::QuaternionFilter m_qfilter;
 	
+	/* Kalman filter */
+	Eigen::Matrix<float, 6, 1> x; // vel, pos
+	Eigen::Matrix<float, 6, 6> A, Pk;
+	Eigen::Matrix<float, 6, 3> B;
+	Eigen::Matrix<float, 3, 6> C;
+	Eigen::Matrix<float, 3, 1> u;
+	float wp, wm;
 
-	// Zeroing
-	bool Zero;
-	int SampleNo;
+	/* Aquire IMU data */
+	virtual int ReadData(char *buffer, unsigned int nbChar) = 0;
+	virtual bool WriteData(const char *buffer, unsigned int nbChar) = 0;
 
-	// measured values
-	Quaternionf Orientation;		// Corrected orientation.
-	Vector3f	Camdata,			// Raw data from camera tracking: [x y z]
-				AngularVelocity,	// angular velocity vector in global reference frame
-				Acceleration;		// Acceleration vector in global reference frame
-	Matrix<float, 10, 1> IMUdata;	// Raw data from IMU: [quat, gyro, accelerometer]
-
-
-	// timing variables
-	std::chrono::time_point<std::chrono::system_clock> StateAge, MPUTimeStamp, CamTimeStamp;
-	bool b_MPUUpdated, b_CamUpdated;
-
-	// Kalman Filter
-	Matrix<float, 6, 1> StateEstimate, PredictedMean;
-	Quaternionf RotOffset;
-	Vector3f Gravity, GyroBias;
-
-	Matrix<float, 6, 6> StateCovar, PredictedCovar, ProcesNoise;
-	Matrix3f CamNoise, AccNoise;
-	float ProcesNoiseScaling;
-
-	// KF methods
-	void Predict();
-
-	// UKF variables
-	Matrix<float, 7, 1> UKFState;
-	Matrix<float, 6, 1> UKFProcessNoise;
-
-	// UKF methods
-	void UKFProcessFunction();
+	Eigen::Matrix<float, 9, 1> ScaleRawData(imu_packet_t imu_packet);
+	Eigen::Quaternionf q_zero;
+	bool m_bZero;
 
 public:
-	// Tag is public
+	cv::Mat cvP, cvx;
+	bool bRotationOnly, bDMP;
+	magdwick AHRS;
+	Pose_t m_pose;
+	eLED_COLOR m_color;
+	//UKF::IMU m_imu;
 	DeviceTag_t m_tag;
 
-	// Constructor
+	// imu calibration
+	Eigen::Vector3f MagScale, MagBias, GyroBias, Gravity;
+
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	TrackedObject(DeviceTag_t tag);
 	~TrackedObject();
 
-	/* Returns object pose. [qw, qx, qy, qz, x, y, z]. */
-	VectorXf getCurrentPose();
+	/* Prints object pose to string */
+	std::wstring PrintPose();
+	std::wstring PrintTag();
+	std::wstring PrintScaledIMU();
 
-	/* Zero's object pose. Collects sensor mean and covariance when full tracking is enabled. */
-	void zero();
+	void TimerCallbackIMU();
+	void TimerCallbackCam(camera& Cam);
 
-	/* Returns color for image tracking. */
-	Eigen::Vector3i getColor();
+	bool HandShake();
+	void Zero();
 
-	/* Determines color for image tracking. */
-	void setColor(Eigen::Vector3i Color);
+	/* Sets the color of the LED */
+	void SetColor(eLED_COLOR color);
 
-	/* Generates data packet for openVR. */
-	PoseMessage_t ToSteam();
-
-	/* Initializes pose time stamp. */
-	void Activate();
-
-	/* Update button states */
-	void ButtonUpdate(DataPacket_t &btn_data);
-
-	/* Updates positional data. Called by camera tracking thread.*/
-	void CamUpdate(const Eigen::Vector3f& Pos);
+	/* stores color from dropdown box */
+	void ColorTagWS(WCHAR* buf);
 	
-	/* Updates IMU data. Called by serial/socket thread. */
-	void MPUUpdate(const Eigen::Vector4f& Quat, const Eigen::Vector3f& Accelerometer, const Eigen::Vector3f& Gyro);
+	void ToggleLED(bool status);
 
-	/* Updates the tracking result. To be called for each tracked object by a main tracking thread. */
-	void Update();
+	void CalibrateMag();
 
-	/* Sets the tracking mode */
-	void SetTrackingMode(e_TrackingMode Mode);
+	void CalibrateAccGyro();
 
-	/* Returns object orientation as quaternion. */
-	Quaternionf GetOrientation();
+	virtual PoseMessage_t GetPose();
 
-	/* Returns tag as string. */
-	std::string GetTag();
+	virtual void savedata();
+
+	virtual bool loaddata();
 };
 

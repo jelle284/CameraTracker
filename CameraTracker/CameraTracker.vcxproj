@@ -84,18 +84,19 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeader>Create</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\Eigen;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\include;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\libusb\include\libusb-1.0;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\Eigen;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\include;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ForcedIncludeFiles>stdafx.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\x86\lib;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_core2413d.lib;opencv_highgui2413d.lib;opencv_imgproc2413d.lib;opencv_calib3d2413d.lib;CLEyeMulticam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\libusb\MS32\dll;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\x86\lib;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libusb-1.0.lib;opencv_core2413d.lib;opencv_highgui2413d.lib;opencv_imgproc2413d.lib;opencv_calib3d2413d.lib;CLEyeMulticam.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ProjectReference>
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
@@ -108,13 +109,15 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\Eigen;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\include;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\libusb\include\libusb-1.0;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\Eigen;C:\opencv-4.0\opencv\build\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\OpenCV\x86\lib;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_core2413d.lib;opencv_highgui2413d.lib;opencv_imgproc2413d.lib;opencv_calib3d2413d.lib;CLEyeMulticam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\libusb\MS64\dll;C:\opencv-4.0\opencv\build\x64\vc14\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world401d.lib;libusb-1.0.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -149,35 +152,50 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\OpenCV_2.4.13.4\build\include;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\Eigen;C:\opencv-4.0\opencv\build\include;C:\libusb\include\libusb-1.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\OpenCV_2.4.13.4\build\x86\vc14\lib;C:\Users\Jesper\Desktop\VR\CameraTracker\thirdparty\CodeLabs\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_core2413.lib;opencv_highgui2413.lib;opencv_imgproc2413.lib;opencv_calib3d2413.lib;CLEyeMulticam.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\opencv-4.0\opencv\build\x64\vc14\lib;C:\libusb\MS64\dll;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world401.lib;libusb-1.0.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />
     <ClInclude Include="CameraTracker.h" />
-    <ClInclude Include="math.h" />
+    <ClInclude Include="DataLogger.h" />
+    <ClInclude Include="DeviceList.h" />
+    <ClInclude Include="HandController.h" />
+    <ClInclude Include="HeadMountDisplay.h" />
+    <ClInclude Include="LibPSEye.h" />
+    <ClInclude Include="magdwick.h" />
     <ClInclude Include="MySerial.h" />
     <ClInclude Include="MySocket.h" />
+    <ClInclude Include="ps3eye.h" />
+    <ClInclude Include="ps3eye_capi.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TrackedObject.h" />
     <ClInclude Include="Tracking_api.h" />
+    <ClInclude Include="UKF.h" />
+    <ClInclude Include="viewer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CameraTracker.cpp" />
-    <ClCompile Include="math.cpp" />
+    <ClCompile Include="DataLogger.cpp" />
+    <ClCompile Include="HandController.cpp" />
+    <ClCompile Include="HeadMountDisplay.cpp" />
+    <ClCompile Include="LibPSEye.cpp" />
+    <ClCompile Include="magdwick.cpp" />
     <ClCompile Include="MySerial.cpp" />
     <ClCompile Include="MySocket.cpp" />
+    <ClCompile Include="ps3eye.cpp" />
+    <ClCompile Include="ps3eye_capi.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -185,6 +203,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="TrackedObject.cpp" />
+    <ClCompile Include="UKF.cpp" />
+    <ClCompile Include="viewer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CameraTracker.rc" />
