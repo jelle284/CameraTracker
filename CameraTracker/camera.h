@@ -1,77 +1,51 @@
 #pragma once
 #include "opencv2/opencv.hpp"
-#include "UKF.h"
+#include "CLEyeMulticam.h"
+
+#include "TrackedObject.h"
+
+typedef cv::Vec<cv::Point3f, 2> CameraRay;
 
 class camera
 {
-public:
-	double v, w; // proces and measurement noise
-	// Container for camera information
-	struct settings_t {
-		cv::Vec3i Hue, Sat, Val;
-		cv::Rect ROI; // region of interest
-		int ROIsize, thresh, fps, gain, exposure;
-		cv::Mat CamMat, RotMat, Tvec, DistCoef;
-		cv::Size imSize;
-		// initializer
-		settings_t() :
-			ROIsize(100), thresh(30), imSize(cv::Size(640,480)),
-			fps(30), gain(20), exposure(30)
-		{
-			using namespace cv;
-			ROI = Rect(0, 0, imSize.width, imSize.height);
-			RotMat = Mat::eye(3, 3, CV_64F);
-			Tvec = Mat::zeros(3, 1, CV_64F);
-			CamMat = Mat::eye(3, 3, CV_64F);
-			DistCoef = Mat::zeros(5, 1, CV_64F);
-		}
-	};
+private:
+	bool running;
+	int n_id;
+	GUID id;
+	CLEyeCameraInstance eye;
+	IplImage *pIm;
+	PBYTE ImageBuffer;
+	int width, height, fps, gain, exposure, thresh;
+	cv::Mat CamMat,		// camera intrinsics
+		DistCoef,	// barrel distortion coefficients
+		RotMat,		// Camera rotation matrix
+		Tvec;		// Camera position
 
+	cv::Vec3i Hue, Sat, Val;
+	cv::Rect m_ROI; // region of interest
+	int m_ROIsize; // size of roi
 	// Container for mouse information
-	struct MouseParam_t {
+	struct MouseParam {
 		cv::Point Position;
 		bool MouseUpdate;
-	};
-	UKF::Camera CameraModel;
-	std::wstring debugstring;
-private:
-	
-	settings_t settings;
-	MouseParam_t mouseparam;
-public:
-	const int file_id;
-	cv::Mat projMat;
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-	camera(int n);
-	~camera();
+	} mouseparam;
 
-	// virtual
-	virtual cv::Mat FrameCapture() = 0;
-	virtual void Start();
-	virtual void Stop();
-	virtual void applySettings();
-	virtual void autoSettings();
-
-	// static
+	// Mouse callback function
 	static void on_mouse(int e, int x, int y, int d, void *ptr);
-	static void intersect(camera * cam1, camera * cam2, cv::Point pixel1, cv::Point pixel2, cv::Mat &Result);
-	static void ukfupdate(cv::Mat & P, cv::Mat & x, camera* cam, const cv::Point& pixel);
-	static bool stereo_calibrate(camera* cam1, camera* cam2);
-	
-	//
-	void Adjust(const DeviceTag_t &tag);
-	void calibrateIntrinsics();
-	bool calibrateChess();
-	void calibrateMouse();
-	void savefile();
-	void loadfile();
-	bool DetectObject(cv::Point& pixel, DeviceTag_t tag, const cv::Mat& im, bool morph = false);
-	settings_t GetSettings();
-	void SetSettings(settings_t settings);
-	void Zero();
 
-private:
-	virtual void ApplyUserParams();
-	void update_camera_model();
-	void textbox(const std::string &text);
+public:
+	camera(int n, int fps);
+	~camera();
+	void ImCapture();
+	void calibrateChess();
+	void calibrateMouse();
+	void adjustColors(std::array<TrackedObject*, DEVICE_COUNT> &DeviceList);
+	void start();
+	bool isRunning();
+	void stop();
+	void savefile();
+	bool DetectObject(cv::Point& point, DeviceTag_t tag);
+	CameraRay RayToWorld(cv::Point pt);
+
+	static void intersect(Vector3f &Position, CameraRay l1, CameraRay l2);
 };

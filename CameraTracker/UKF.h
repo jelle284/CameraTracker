@@ -12,7 +12,6 @@ with added position estimation
 namespace UKF
 {
 	Eigen::Quaternionf RotationVectorToQuat(const Eigen::Vector3f &rotation_vector);
-
 	/*
 	Inertial Measurement Unit
 	-> Calculates measurement noise and inner orientation.
@@ -22,7 +21,7 @@ namespace UKF
 
 	class IMU
 	{
-	public:
+	private:
 		/*
 		Rotation Matrix:
 		Coordinate transform from device local coordinates to imu local coordinates
@@ -38,14 +37,9 @@ namespace UKF
 		/*
 		Reference variables
 		*/
-		Eigen::Quaternionf
+		Eigen::Vector3f
 			m_Gravity,
 			m_North;
-
-		/* Magnetometer calibration*/
-		Eigen::Vector3f
-			m_MagBias,
-			m_MagScale;
 
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -60,23 +54,20 @@ namespace UKF
 		Eigen::Matrix<float, 9, 9> m_Covariance;
 		/*
 		Zero function
-		* Must be held still while collecting samples
-		* Returns data covariance matrix
-		* Sets reference variables and inner orientation
+		*Returns data covariance matrix
+		*Sets reference variables and inner orientation
 		*/
 		void Zero(Eigen::Matrix<float, 9, 100> Samples);
-
-		/*
-		Magnetometer calibration:
-		IMU version
-		*/
-		void CalibrateMag(const Eigen::Matrix<float, 6, 1> &bias_scale);
 	};
 
 	/* 
 	Camera Class
 	*/
 	class Camera {
+	private:
+		Eigen::Matrix4f m_Extrinsics;
+		Eigen::Matrix<float, 3, 4> m_Intrinsics;
+
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 		Camera();
@@ -85,8 +76,6 @@ namespace UKF
 		Eigen::Matrix2f m_Covariance;
 		void SetTransform(const Eigen::Matrix4f& Extrinsics, const Eigen::Matrix<float, 3, 4>& Intrinsics);
 		void CalculateCovariance(Eigen::Matrix<float, 2, 100> Samples);
-		Eigen::Matrix4f m_Extrinsics;
-		Eigen::Matrix<float, 3, 4> m_Intrinsics;
 	};
 
 	/*
@@ -159,41 +148,5 @@ namespace UKF
 		Eigen::Matrix<float, 16, 1> GetState();
 
 		void ZeroState();
-	};
-
-	/*
-	Quaternion filter
-	*/
-	class QuaternionFilter {
-	private:
-		Eigen::Matrix<float, 7, 1> m_State; // [quaternion, angular velocity]
-
-		// State covariance matrix
-		Eigen::Matrix<float, 6, 6> m_Covar;
-	public:
-		QuaternionFilter();
-		~QuaternionFilter();
-		void IMUCallback(
-			const Eigen::Matrix<float, 9, 1>& measured_acc_gyro_mag,
-			UKF::IMU& imu
-		);
-		Eigen::Matrix<float, 7, 1> getState();
-	};
-
-	/*
-	Camera filter
-	Linear proces, nonlinear observation
-	*/
-	class CKF {
-		bool first;
-		Eigen::Matrix<float, 6, 1> X; // acc vel pos
-		Eigen::Matrix<float, 6, 6> Pk;
-		float wm, wp; // measurement and proces noise
-		std::chrono::time_point<std::chrono::system_clock> clock_prev;
-	public:
-		CKF();
-		~CKF();
-		void predict(std::chrono::time_point<std::chrono::system_clock> clock_now);
-		void correct(Eigen::Vector2f pixel);
 	};
 }

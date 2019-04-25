@@ -6,27 +6,17 @@ class HandController :
 	public TrackedObject
 {
 private:
-	ButtonState_t m_buttons;
-
-
-	//struct sockaddr_in Address;
-	//SOCKET s;
-	//WSADATA wsa;
-	//bool bSocketBusy;
+	Eigen::Matrix<float, 9, 1> IMUProvider() override;
+	bool ConnectionProvider() override;
 public:
-	MySocket* pSocketHost;
+	MySocket* pSocketProvider;
+	int m_sockethandle;
 
-	HandController(DeviceTag_t tag);
+	HandController(DeviceTag_t tag, MySocket* pSocketProvider, int sockethandle);
 	~HandController();
+	
+	void SetColor(LED_COLORS color) override;
 
-	void ButtonUpdate();
-
-	std::wstring PrintRawData();
-
-	int ReadData(char *buffer, unsigned int nbChar) override;
-
-	bool WriteData(const char *buffer, unsigned int nbChar) override;
-
-	PoseMessage_t GetPose() override;
+	ButtonState_t ButtonUpdate();
 };
 

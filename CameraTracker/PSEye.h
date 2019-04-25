@@ -1,8 +1,4 @@
 #pragma once
-#ifdef USE_CL_DRIVER
-
-
-
 #include "camera.h"
 #include "CLEyeMulticam.h"
 
@@ -18,7 +14,6 @@ private:
 	CLEyeCameraInstance eye;
 	IplImage *pIm;
 	PBYTE ImageBuffer;
-
 public:
 	
 	PSEye();
@@ -29,7 +24,5 @@ public:
 	void Start() override;
 	void Stop() override;
 	bool isRunning();
-	void ApplyUserParams() override;
 };
 
-#endif // USE_CL_DRIVER

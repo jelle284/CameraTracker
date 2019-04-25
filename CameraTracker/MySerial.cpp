@@ -6,6 +6,7 @@ MySerial::MySerial(LPCWSTR portName)
 {
 	//We're not yet connected
 	this->connected = false;
+	this->running = false;
 
 	//Try to connect to the given port throuh CreateFile
 	this->hSerial = CreateFile(portName,
@@ -52,6 +53,9 @@ MySerial::MySerial(LPCWSTR portName)
 
 MySerial::~MySerial()
 {
+	// Stop if we are still running
+	if (running) this->Stop();
+
 	//Check if we are connected before trying to disconnect
 	if (this->connected)
 	{
@@ -120,4 +124,54 @@ bool MySerial::IsConnected()
 {
 	//Simply return the connection status
 	return this->connected;
+}
+
+void MySerial::setColor(LED_COLORS COLOR) {
+	Sleep(100);
+	switch (COLOR) {
+	case LED_RED:
+		this->WriteData("R", 2);
+		break;
+	case LED_GREEN:
+		this->WriteData("G", 2);
+		break;
+	case LED_BLUE:
+		this->WriteData("B", 2);
+		break;
+	case LED_OFF:
+		this->WriteData("n", 2);
+		break;
+	}
+}
+
+void MySerial::captureThread() {
+	DataPacket_t DataPacket;
+	pHMD->Activate();
+	while (running) {
+		this->WriteData("s", 2); // request sample
+		this->ReadData((char*)(&DataPacket), sizeof(DataPacket));
+		pHMD->MPUUpdate(
+			Eigen::Vector4f(DataPacket.quat[0], -DataPacket.quat[1], DataPacket.quat[2], -DataPacket.quat[3]),
+			Eigen::Vector3f(-DataPacket.acc[0], DataPacket.acc[1], -DataPacket.acc[2]),
+			Eigen::Vector3f(-DataPacket.gyro[0], DataPacket.gyro[1], -DataPacket.gyro[2])
+		);
+		Sleep(15);
+	}
+}
+
+void MySerial::AddDevice(TrackedObject *pDevice)
+{
+	pHMD = pDevice;
+}
+
+void MySerial::Start()
+{
+	running = true;
+	t_captureThread = std::thread(&MySerial::captureThread, this);
+}
+
+void MySerial::Stop()
+{
+	running = false;
+	t_captureThread.join();
 }

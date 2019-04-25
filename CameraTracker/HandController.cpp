@@ -2,80 +2,45 @@
 #include "HandController.h"
 
 
-
-
-HandController::HandController(DeviceTag_t tag) :
-	TrackedObject(tag)
+Eigen::Matrix<float, 9, 1> HandController::IMUProvider()
 {
-	bDMP = false;
-	switch (tag) {
-	case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
-		m_pose.pos[0] = 0.2f;
-		break;
-	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
-		m_pose.pos[0] = -0.2f;
-		break;
-	}
-	
-	m_pose.pos[1] = -0.2f;
-	m_pose.pos[2] = -0.4f;
+	pSocketProvider->Send("sample", 7, m_sockethandle);
+	DataPacket_t data;
+	pSocketProvider->Read((char*)(&data), sizeof(data), m_sockethandle);
+	Eigen::Matrix<float, 9, 1> Edata = Eigen::Map<Eigen::Matrix<float, 9, 1>>(data.acc_gyro_mag);
+	return Edata;
 }
+
+HandController::HandController(DeviceTag_t tag, MySocket* pSocketProvider, int sockethandle) :
+	TrackedObject(tag),
+	m_sockethandle(sockethandle),
+	pSocketProvider(pSocketProvider)
+{
+	
+}
+
 
 HandController::~HandController()
 {
 }
 
-void HandController::ButtonUpdate()
+void HandController::SetColor(LED_COLORS color)
 {
-	adc_packet_t adc_packet = { 0 };
-
-	WriteData("adc", 4);
-	if (ReadData((char*)&adc_packet, sizeof(adc_packet)) == sizeof(adc_packet)) {
-		m_buttons.axis[ANALOG_TAG_Y] = (float)adc_packet.a0 / 16383;
-		m_buttons.axis[ANALOG_TAG_X] = (float)adc_packet.a1 / 16383;
-		m_buttons.axis[ANALOG_TAG_TRIGGER] = (float)adc_packet.a3 / 16383;
-
-		int16_t buttonlowlimit[BUTTON_COUNT] = { 15900, 14300, 11900, 5400 };
-		int16_t	buttonhighlimit[BUTTON_COUNT] = { 16100, 14500, 12100, 5600 };
-
-		for (int i = 0; i < BUTTON_COUNT; ++i) {
-			m_buttons.ButtonState[i] = (adc_packet.a2 > buttonlowlimit[i] && adc_packet.a2 < buttonhighlimit[i]);
-		}
-	}
+	pSocketProvider->Send("green", 6, m_sockethandle);
 }
 
-std::wstring HandController::PrintRawData()
+bool HandController::ConnectionProvider()
 {
-	char buffer[256] = { 0 };
-	
-	WriteData("print", 6);
-	ReadData((char*)&buffer, sizeof(buffer));
-
-	wchar_t wbuffer[128] = { 0 };
-	mbstowcs_s<128>(NULL,wbuffer, buffer, 128);
-	return std::wstring(wbuffer);
+	char buffer[32];
+	pSocketProvider->Send("id", 3, m_sockethandle);
+	pSocketProvider->Read(buffer, sizeof(buffer), m_sockethandle);
+	if (strcmp(buffer, "VRController") == 0) return true;
+	else return false;
 }
 
-bool HandController::WriteData(const char * buffer, unsigned int nbChar)
+ButtonState_t HandController::ButtonUpdate()
 {
-	pSocketHost->Send(m_tag, buffer, nbChar);
-	return false;
+	ButtonState_t buttons = { 0 };
+	return buttons;
 }
 
-int HandController::ReadData(char * buffer, unsigned int nbChar)
-{
-	int bytes_read = pSocketHost->Read(m_tag, buffer, nbChar);
-	return bytes_read;
-}
-
-PoseMessage_t HandController::GetPose()
-{
-	PoseMessage_t PoseMessage;
-	PoseMessage.tag = m_tag;
-	PoseMessage.pose = m_pose;
-	PoseMessage.pose.q[2] = -m_pose.q[3];
-	PoseMessage.pose.q[3] = m_pose.q[2];
-	PoseMessage.buttons = m_buttons;
-
-	return PoseMessage;
-}

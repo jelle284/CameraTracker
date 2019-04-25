@@ -6,24 +6,17 @@ class HeadMountDisplay :
 	public TrackedObject
 {
 private:
-	MySerial* pCOM;
-	
-public:
-	float K1, K2, zW, zH, IPD;
+	MySerial COM;
+	Eigen::Matrix<float, 9, 1> IMUProvider() override;
 
+public:
 	HeadMountDisplay();
 	~HeadMountDisplay();
 
-	void ChangeCOM(std::wstring port);
+	/* Sets the color of the LED */
+	void SetColor(LED_COLORS color) override;
 
-	std::wstring PrintRawData();
-
-	int ReadData(char *buffer, unsigned int nbChar) override;
-
-	bool WriteData(const char *buffer, unsigned int nbChar) override;
-
-	PoseMessage_t GetPose() override;
-
-	std::wstring portname;
+	/* Check connection status */
+	bool ConnectionProvider() override;
 };
 
