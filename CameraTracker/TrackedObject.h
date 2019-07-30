@@ -3,6 +3,7 @@
 #include "camera.h"
 #include "MySocket.h"
 #include "magdwick.h"
+#include "viewer.h"
 
 enum eLED_COLOR {
 	LED_RED,
@@ -15,9 +16,6 @@ class TrackedObject
 {
 private:
 	std::string fName; // filename of saved data
-
-	//UKF::Estimator m_filter;
-	//UKF::QuaternionFilter m_qfilter;
 	
 	/* Kalman filter */
 	Eigen::Matrix<float, 6, 1> x; // vel, pos
@@ -37,15 +35,17 @@ private:
 
 public:
 	cv::Mat cvP, cvx;
-	bool bRotationOnly, bDMP;
+	bool bRotationOnly, bDMP, connectionStatus;
 	magdwick AHRS;
 	Pose_t m_pose;
 	eLED_COLOR m_color;
 	//UKF::IMU m_imu;
 	DeviceTag_t m_tag;
+	ButtonState_t m_buttons;
 
 	// imu calibration
 	Eigen::Vector3f MagScale, MagBias, GyroBias, Gravity;
+	Eigen::Matrix<int16_t, 3, 1> magbias, gyrobias;
 
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	TrackedObject(DeviceTag_t tag);

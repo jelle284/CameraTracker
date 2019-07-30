@@ -63,13 +63,13 @@ void camera::Adjust(const DeviceTag_t &tag)
 	MouseParam_t mouseparam;
 
 	/* create cam window*/
-	std::string winname = "camera x";
-	winname.replace(7, 1, std::to_string(file_id));
+	std::string winname = "camera ";
+	winname.append(std::to_string(file_id));
 	namedWindow(winname, WINDOW_AUTOSIZE);
 
 	/* create trackbars*/
-	std::string ctrlname = "control x";
-	ctrlname.replace(8, 1, std::to_string(file_id));
+	std::string ctrlname = "control ";
+	ctrlname.append(std::to_string(file_id));
 	namedWindow(ctrlname, WINDOW_AUTOSIZE);
 	createTrackbar("Gain", ctrlname, &settings.gain, 79);
 	createTrackbar("Exposure", ctrlname, &settings.exposure, 511);
@@ -81,10 +81,11 @@ void camera::Adjust(const DeviceTag_t &tag)
 
 	/* start */
 	this->Start();
-	Sleep(20);
-	while (1) {
+	this->applySettings();
+
+	bool running = true;
+	while (running) {
 		// get image
-		this->applySettings();
 		cv::Mat im = this->FrameCapture();
 
 		// Detect and paint circles
@@ -109,10 +110,19 @@ void camera::Adjust(const DeviceTag_t &tag)
 		}
 
 		cv::imshow(winname, im);
-		if (cv::waitKey(16) > 0) break;
+		int k = cv::waitKey(16);
+		switch (k) {
+		case VK_ESCAPE:
+			running = false;
+			break;
+		case VK_SPACE:
+			this->applySettings();
+			break;
+		}
+			
+		
 	}
 	this->Stop();
-	Sleep(20);
 	cv::destroyAllWindows();
 }
 
@@ -235,7 +245,7 @@ bool camera::DetectObject(cv::Point& pixel, DeviceTag_t tag, const cv::Mat& im, 
 		return true;
 	}
 	else {
-		// grow ROI and select whole image
+		// grow ROI or select whole image
 		if (settings.ROIsize < 200) settings.ROIsize += 10;
 		settings.ROI = Rect(0, 0, settings.imSize.width, settings.imSize.height);
 		return false;
@@ -272,6 +282,19 @@ void camera::Zero()
 	}
 	Stop();
 }
+
+cv::Mat camera::PPTrack(const cv::Point & pix, const cv::Mat &pos)
+{
+ // https://math.stackexchange.com/a/1905794
+
+	using namespace cv;
+	Mat d = settings.RotMat * (settings.CamMat * (Mat_<double>(3, 1) << (double)pix.x, (double)pix.y, 1.0)) + settings.Tvec;
+	Mat v = pos - settings.Tvec;
+	double t = v.dot(d);
+	Mat P = settings.Tvec + t * d;
+	return P;
+}
+
 
 void camera::ApplyUserParams()
 {

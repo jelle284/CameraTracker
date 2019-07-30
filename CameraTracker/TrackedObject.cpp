@@ -70,27 +70,6 @@ TrackedObject::~TrackedObject()
 std::wstring TrackedObject::PrintPose(){
 	std::wstringstream ss;
 
-	//std::wstring name = PrintTag();
-	//Eigen::Matrix<float, 16, 1> currentPose = m_filter.GetState();
-	//ss << name << ": \n" <<
-	//	"Position: (" <<
-	//	std::to_wstring(currentPose(0)) << ", " <<
-	//	std::to_wstring(currentPose(1)) << ", " <<
-	//	std::to_wstring(currentPose(2)) << ")\n " <<
-	//	"Q: (" <<
-	//	std::to_wstring(currentPose(15)) << ", " <<
-	//	std::to_wstring(currentPose(12)) << ", " <<
-	//	std::to_wstring(currentPose(13)) << ", " <<
-	//	std::to_wstring(currentPose(14)) << ")\n";
-
-	//Eigen::Matrix<float, 7, 1> currentPose = m_qfilter.getState();
-	//ss << PrintTag() << ": \n" <<
-	//	"Q: (" <<
-	//	std::to_wstring(currentPose(3)) << ", " <<
-	//	std::to_wstring(currentPose(0)) << ", " <<
-	//	std::to_wstring(currentPose(1)) << ", " <<
-	//	std::to_wstring(currentPose(2)) << ")\n";
-
 	ss << PrintTag() << ": \n" <<
 	"Q: (" <<
 	std::to_wstring(m_pose.q[0]) << ", " <<
@@ -204,11 +183,12 @@ void TrackedObject::TimerCallbackIMU()
 		}
 	}
 	else {
-		imu_packet_t imu_packet = { 0 };
-		WriteData("imu", 4);
-		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
-			auto acc_gyro_mag = ScaleRawData(imu_packet);
+		scaled_data_t scaled_data = { 0 };
+		char read_req[] = { 0x10, 0x00, 1 };
 
+		WriteData(read_req, sizeof(read_req));
+		if (ReadData((char*)&scaled_data, sizeof(scaled_data)) == sizeof(scaled_data)) {
+			Eigen::Matrix<float, 9, 1> acc_gyro_mag(scaled_data.imu);
 			// magdwick algorithm:
 			AHRS.timing();
 			AHRS.update(
@@ -227,6 +207,12 @@ void TrackedObject::TimerCallbackIMU()
 			if (m_bZero) {
 				q_zero = Eigen::Quaternionf(AHRS.q0, AHRS.q1, AHRS.q2, AHRS.q3).conjugate();
 				m_bZero = false;
+			}
+
+			// buttons
+			memcpy(m_buttons.axis, scaled_data.analogs, sizeof(m_buttons.axis));
+			for (auto btn = 0; btn < BUTTON_COUNT; ++btn) {
+				m_buttons.ButtonState[btn] = ( scaled_data.buttons == (btn + 1) );
 			}
 		}
 	}
@@ -286,7 +272,7 @@ bool TrackedObject::HandShake()
 {
 	for (int i = 0; i < 5; i++) {
 		WriteData("id", 3);
-		Sleep(200);
+		Sleep(40);
 		char buf[64] = { 0 };
 		if (ReadData(buf, sizeof(buf)) > 0) {
 			switch (m_tag) {
@@ -327,6 +313,29 @@ void TrackedObject::Zero()
 {
 	m_bZero = true;
 	//WriteData("zero", 5);
+	m_pose.vel[0] = 0;
+	m_pose.vel[1] = 0;
+	m_pose.vel[2] = 0;
+	m_pose.ang_vel[0] = 0;
+	m_pose.ang_vel[1] = 0;
+	m_pose.ang_vel[2] = 0;
+	switch (this->m_tag) {
+	case DEVICE_TAG_HMD:
+		m_pose.pos[0] = 0;
+		m_pose.pos[1] = 0;
+		m_pose.pos[2] = 0;
+		break;
+	case DEVICE_TAG_RIGHT_HAND_CONTROLLER:
+		m_pose.pos[0] = 0.4;
+		m_pose.pos[1] = -0.2;
+		m_pose.pos[2] = -0.4;
+		break;
+	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
+		m_pose.pos[0] = -0.4;
+		m_pose.pos[1] = -0.2;
+		m_pose.pos[2] = -0.4;
+		break;
+	}
 	
 }
 
@@ -404,32 +413,56 @@ bool TrackedObject::loaddata()
 
 void TrackedObject::CalibrateMag()
 {
-	const int sample_len = 150;
 	using namespace Eigen;
-	Matrix<float, 9, sample_len> buffer;
-	int i = 0, j = 0;
+	viewer v;
+
+	const int sample_len = 2000;
+	Matrix<int16_t, 3, sample_len> buffer;
+	
+	// zero calib
 	MagBias.setZero();
 	MagScale.fill(1.0f);
+
+	int i = 0, j = 0;
 	while (j < 2*sample_len) {
-		imu_packet_t imu_packet;
-		WriteData("imu", 4);
-		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
-			auto acc_gyro_mag = ScaleRawData(imu_packet);
-			buffer.col(i) = acc_gyro_mag;
+		// collect data
+		int16_t mag_data[3];
+		char read_req[3] = { 0x12, 0x06, 3 };
+		WriteData(read_req, sizeof(read_req));
+		if (ReadData((char*)&mag_data, sizeof(mag_data)) == sizeof(mag_data)) {
+			buffer.col(i) = Matrix<int16_t, 3, 1>(mag_data);
 			i++;
 			if (i == sample_len) {
-				auto mag_max = buffer.rowwise().maxCoeff().segment(6, 3);
-				auto mag_min = buffer.rowwise().minCoeff().segment(6, 3);
-				MagBias = (mag_max + mag_min) / 2;
-				MagScale = (mag_max - mag_min) / 2;
+				// calculate values
+				auto mag_max = buffer.rowwise().maxCoeff();
+				auto mag_min = buffer.rowwise().minCoeff();
+				magbias = (mag_max + mag_min) / 2;
+				MagScale = (mag_max - mag_min).cast<float>() / 2;
 				for (int i = 0; i<3; ++i)
 					MagScale(i) = MagScale.mean() / MagScale(i);
 				savedata();
+				{	// write mag scale
+					char write_buffer[15], write_req[] = { 0x21, 0x10, 3 };
+					memcpy(write_buffer, write_req, 3);
+					memcpy(write_buffer + 3, MagScale.data(), 12);
+					WriteData(write_buffer, 15);
+				}
+				{	// write mag bias
+					char write_buffer[9], write_req[] = { 0x21, 0x30, 3 };
+					memcpy(write_buffer, write_req, 3);
+					memcpy(write_buffer + 3, magbias.data(), 6);
+					WriteData(write_buffer, 9);
+				}
 				break;
 			}
 		}
 		j++;
-		Sleep(80);
+		// draw data
+		v.clear();
+		for (int ii = 0; ii < i; ++ii)
+			v.drawMag(cv::Vec3s(buffer(0, ii), buffer(1, ii), buffer(2, ii)));
+		v.show();
+		if (cv::waitKey(30) == VK_ESCAPE) break;
 	}
 }
 
@@ -437,21 +470,27 @@ void TrackedObject::CalibrateAccGyro()
 {
 	const int sample_len = 100;
 	using namespace Eigen;
-	Matrix<float, 9, sample_len> buffer;
+	Matrix<int16_t, 6, sample_len> buffer;
 	GyroBias.setZero();
 	Gravity << 0.0f, 9.81f, 0.0f;
 	int i = 0, j = 0;
 	while (j < 2 * sample_len) {
-		imu_packet_t imu_packet;
-		WriteData("imu", 4);
-		if (ReadData((char*)&imu_packet, sizeof(imu_packet)) == sizeof(imu_packet)) {
-			auto acc_gyro_mag = ScaleRawData(imu_packet);
-			buffer.col(i) = acc_gyro_mag;
+		int16_t imu_data[6];
+		char read_req[3] = { 0x12, 0x00, 6 };
+		WriteData(read_req, sizeof(read_req));
+		if (ReadData((char*)&imu_data, sizeof(imu_data)) == sizeof(imu_data)) {
+			buffer.col(i) = Matrix<int16_t, 6, 1>(imu_data);
 			i++;
 			if (i == sample_len) {
-				GyroBias = acc_gyro_mag.segment(3, 3).rowwise().mean();
-				Gravity = acc_gyro_mag.head(3).rowwise().mean();
+				gyrobias = buffer.rowwise().mean().tail(3);
+				Gravity = buffer.cast<float>().rowwise().mean().head(3);
 				savedata();
+				{	// write gyro bias
+					char write_buffer[9], write_req[] = { 0x21, 0x40, 3 };
+					memcpy(write_buffer, write_req, 3);
+					memcpy(write_buffer + 3, gyrobias.data(), 6);
+					WriteData(write_buffer, 9);
+				}
 				break;
 			}
 		}

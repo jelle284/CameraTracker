@@ -28,11 +28,11 @@ camera_rotation: !!opencv-matrix
        -9.3494128854778003e-01, 2.6547765541625540e-01,
        -5.5714356745156290e-01, 3.5361935808280548e-01,
        7.5136169375105200e-01 ]
-Hue: [ 179, 0, 0 ]
-Saturation: [ 112, 0, 0 ]
-Value: [ 234, 0, 0 ]
-Threshold: 30
-Exposure: 53
-Gain: 18
+Hue: [ 0, 90, 0 ]
+Saturation: [ 111, 114, 0 ]
+Value: [ 221, 255, 0 ]
+Threshold: 22
+Exposure: 168
+Gain: 14
 Size: [ 640, 480 ]
 FPS: 60

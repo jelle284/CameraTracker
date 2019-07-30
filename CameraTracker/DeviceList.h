@@ -6,7 +6,6 @@
 #include "HandController.h"
 #include "viewer.h"
 
-
 // Some global vars
 // ================
 
@@ -15,7 +14,8 @@ bRunning = false,
 bCameraConnected = false,
 bRotationOnly = false, 
 bCheckBox[2] = { false },
-bDataLogging = false;
+bDataLogging = false,
+bLEDToggleState[DEVICE_COUNT] = { false };
 
 std::vector<TrackedObject*> 
 DeviceList;
@@ -82,14 +82,14 @@ void DeviceManager() {
 	if (HMD.HandShake())
 		DeviceList.push_back(&HMD);
 
-	if (bCheckBox[0]) {
-
-		if (RHController.HandShake())
+	SocketHost.FindControllers();
+	if (!bCheckBox[0]) {
+		if (SocketHost.IdStatus[DEVICE_TAG_RIGHT_HAND_CONTROLLER])
 			DeviceList.push_back(&RHController);
 	}
-	if (bCheckBox[1]) {
+	if (!bCheckBox[1]) {
 
-		if (LHController.HandShake())
+		if (SocketHost.IdStatus[DEVICE_TAG_LEFT_HAND_CONTROLLER])
 			DeviceList.push_back(&LHController);
 	}
 	for (auto & device : DeviceList)

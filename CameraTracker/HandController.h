@@ -6,13 +6,8 @@ class HandController :
 	public TrackedObject
 {
 private:
-	ButtonState_t m_buttons;
+	
 
-
-	//struct sockaddr_in Address;
-	//SOCKET s;
-	//WSADATA wsa;
-	//bool bSocketBusy;
 public:
 	MySocket* pSocketHost;
 

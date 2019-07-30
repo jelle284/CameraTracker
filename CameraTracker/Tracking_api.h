@@ -40,6 +40,17 @@ struct adc_packet_t {
 	int16_t a0, a1, a2, a3;
 };
 
+// replaced with
+struct scaled_data_t {
+	float imu[9], analogs[3];
+	uint8_t buttons;
+};
+
+struct write_message_t {
+	char header[3];
+	int16_t data[8];
+};
+
 /* Button information */
 struct ButtonState_t {
 	float axis[ANALOG_COUNT];

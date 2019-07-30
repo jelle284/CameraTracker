@@ -70,6 +70,10 @@ public:
 	void SetSettings(settings_t settings);
 	void Zero();
 
+	//
+
+	cv::Mat PPTrack(const cv::Point & pix, const cv::Mat &pos);
+
 private:
 	virtual void ApplyUserParams();
 	void update_camera_model();
