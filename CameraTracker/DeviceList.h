@@ -5,6 +5,7 @@
 #include "HeadMountDisplay.h"
 #include "HandController.h"
 #include "viewer.h"
+#include "DlgHandController.h"
 
 // Some global vars
 // ================
@@ -166,3 +167,6 @@ void UpdatePose(TrackedObject* pDevice) {
 /* viewer */
 viewer Viewer;
 std::vector<cam_ctx> Cam_ctx;
+
+/* Dialogs */
+DlgHandController dlgHandController(&SocketHost);

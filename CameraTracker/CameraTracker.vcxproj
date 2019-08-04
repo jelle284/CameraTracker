@@ -164,10 +164,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BasicDialog.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="CameraTracker.h" />
     <ClInclude Include="DataLogger.h" />
     <ClInclude Include="DeviceList.h" />
+    <ClInclude Include="DlgHandController.h" />
     <ClInclude Include="HandController.h" />
     <ClInclude Include="HeadMountDisplay.h" />
     <ClInclude Include="LibPSEye.h" />
@@ -186,9 +188,11 @@
     <ClInclude Include="viewer.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BasicDialog.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CameraTracker.cpp" />
     <ClCompile Include="DataLogger.cpp" />
+    <ClCompile Include="DlgHandController.cpp" />
     <ClCompile Include="HandController.cpp" />
     <ClCompile Include="HeadMountDisplay.cpp" />
     <ClCompile Include="LibPSEye.cpp" />

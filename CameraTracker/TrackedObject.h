@@ -12,18 +12,29 @@ enum eLED_COLOR {
 	LED_OFF
 };
 
-class TrackedObject
-{
-private:
-	std::string fName; // filename of saved data
-	
-	/* Kalman filter */
+/* Kalman filter */
+class kalman_t {
 	Eigen::Matrix<float, 6, 1> x; // vel, pos
 	Eigen::Matrix<float, 6, 6> A, Pk;
 	Eigen::Matrix<float, 6, 3> B;
 	Eigen::Matrix<float, 3, 6> C;
 	Eigen::Matrix<float, 3, 1> u;
 	float wp, wm;
+	std::chrono::time_point<std::chrono::steady_clock> time_ms;
+public:
+	kalman_t();
+	void begin_timing() { time_ms = std::chrono::steady_clock::now(); }
+	void update(Eigen::Vector3f pos3d);
+	void getPos(float* px, float* py, float *pz) { *px = x(3); *py = x(4); *pz = x(5); }
+	void fromSliders(float sld1, float sld2) { wp = sld1; wm = sld2; }
+};
+
+class TrackedObject
+{
+private:
+	std::string fName; // filename of saved data
+	
+
 
 	/* Aquire IMU data */
 	virtual int ReadData(char *buffer, unsigned int nbChar) = 0;
@@ -34,6 +45,7 @@ private:
 	bool m_bZero;
 
 public:
+	kalman_t kf;
 	cv::Mat cvP, cvx;
 	bool bRotationOnly, bDMP, connectionStatus;
 	magdwick AHRS;

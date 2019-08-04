@@ -5,3 +5,5 @@ x64/
 CameraTracker/CameraTracker.vcxproj.user
 .yml
 overblik i rodet.pptx
+CameraTracker/BasicDialog.h
+CameraTracker/BasicDialog.cpp

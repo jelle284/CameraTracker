@@ -42,7 +42,7 @@ struct adc_packet_t {
 
 // replaced with
 struct scaled_data_t {
-	float imu[9], analogs[3];
+	float imu[13], analogs[3];
 	uint8_t buttons;
 };
 

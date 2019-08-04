@@ -75,6 +75,12 @@
     <ClInclude Include="tracking_math.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DlgHandController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BasicDialog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -123,6 +129,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tracking_math.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgHandController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BasicDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

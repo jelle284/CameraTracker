@@ -72,8 +72,8 @@ void camera::Adjust(const DeviceTag_t &tag)
 	ctrlname.append(std::to_string(file_id));
 	namedWindow(ctrlname, WINDOW_AUTOSIZE);
 	createTrackbar("Gain", ctrlname, &settings.gain, 79);
-	createTrackbar("Exposure", ctrlname, &settings.exposure, 511);
-	createTrackbar("Thresh", ctrlname, &settings.thresh, 120);
+	createTrackbar("Exposure", ctrlname, &settings.exposure, 255);
+	createTrackbar("Thresh", ctrlname, &devices[tag].thresh, 120);
 
 	/* bind mouse callback*/
 	setMouseCallback(winname, on_mouse, &mouseparam);
@@ -95,7 +95,7 @@ void camera::Adjust(const DeviceTag_t &tag)
 			circle(im, pt, 20,
 				Scalar(255, 0, 0),
 				2, 8);
-			rectangle(im, GetSettings().ROI, Scalar(255, 0, 0), 2, 8, 0);
+			rectangle(im, devices[tag].ROI, Scalar(255, 0, 0), 2, 8, 0);
 		}
 
 		// on mouse click
@@ -103,10 +103,7 @@ void camera::Adjust(const DeviceTag_t &tag)
 			mouseparam.MouseUpdate = false;
 			Mat HSV;
 			cvtColor(im, HSV, COLOR_BGR2HSV);
-			Vec3b hsv = HSV(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
-			settings.Hue(tag) = hsv(0);
-			settings.Sat(tag) = hsv(1);
-			settings.Val(tag) = hsv(2);
+			devices[tag].hsv = HSV(Rect(mouseparam.Position.x, mouseparam.Position.y, 1, 1)).at<Vec3b>(0, 0);
 		}
 
 		cv::imshow(winname, im);
@@ -131,7 +128,15 @@ void camera::savefile() {
 	//Mat noise = (Mat_<float>(2, 2) <<
 	//	CameraModel.m_Covariance(0, 0), CameraModel.m_Covariance(0, 1),
 	//	CameraModel.m_Covariance(1, 0), CameraModel.m_Covariance(1, 1));
-
+	Vec3b Hue, Sat, Val;
+	Vec3i thresh;
+	for (int i = 0; i < DEVICE_COUNT; ++i)
+	{
+		Hue(i) = devices[i].hsv(0);
+		Sat(i) = devices[i].hsv(1);
+		Val(i) = devices[i].hsv(2);
+		thresh(i) = devices[i].thresh;
+	}
 	std::string filename = "camera_X.yml";
 	filename.replace(7, 1, std::to_string(file_id));
 	FileStorage fs(filename, FileStorage::WRITE);
@@ -139,10 +144,10 @@ void camera::savefile() {
 	fs << "distortion_coefficients" << settings.DistCoef;
 	fs << "camera_position" << settings.Tvec;
 	fs << "camera_rotation" << settings.RotMat;
-	fs << "Hue" << settings.Hue;
-	fs << "Saturation" << settings.Sat;
-	fs << "Value" << settings.Val;
-	fs << "Threshold" << settings.thresh;
+	fs << "Hue" << Hue;
+	fs << "Saturation" << Sat;
+	fs << "Value" << Val;
+	fs << "Threshold" << thresh;
 	fs << "Exposure" << settings.exposure;
 	fs << "Gain" << settings.gain;
 	fs << "Size" << settings.imSize;
@@ -152,7 +157,9 @@ void camera::savefile() {
 
 void camera::loadfile()
 {
-	//cv::Mat noise;
+	using namespace cv;
+	Vec3b Hue, Sat, Val;
+	Vec3i thresh;
 	std::string filename = "camera_X.yml";
 	filename.replace(7, 1, std::to_string(file_id));
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
@@ -160,21 +167,23 @@ void camera::loadfile()
 	fs["distortion_coefficients"] >> settings.DistCoef;
 	fs["camera_position"] >> settings.Tvec;
 	fs["camera_rotation"] >> settings.RotMat;
-	fs["Hue"] >> settings.Hue;
-	fs["Saturation"] >> settings.Sat;
-	fs["Value"] >> settings.Val;
-	fs["Threshold"] >> settings.thresh;
+	fs["Hue"] >> Hue;
+	fs["Saturation"] >> Sat;
+	fs["Value"] >> Val;
+	fs["Threshold"] >> thresh;
 	fs["Exposure"] >> settings.exposure;
 	fs["Gain"] >> settings.gain;
 	fs["Size"] >> settings.imSize;
 	fs["FPS"] >> settings.fps;
 	fs.release();
 
-	//CameraModel.m_Covariance = Eigen::Matrix2f(cv::Matx22f(noise).val);
-
-
-	//update_camera_model();
-
+	for (int i = 0; i < DEVICE_COUNT; ++i)
+	{
+		devices[i].hsv(0) = Hue(i);
+		devices[i].hsv(1) = Sat(i);
+		devices[i].hsv(2) = Val(i);
+		devices[i].thresh = thresh(i);
+	}
 }
 
 void camera::textbox(const std::string &text)
@@ -208,16 +217,16 @@ void camera::textbox(const std::string &text)
 bool camera::DetectObject(cv::Point& pixel, DeviceTag_t tag, const cv::Mat& im, bool morph) {
 	using namespace cv;
 	Mat bw, HSV;
-	cvtColor(im(settings.ROI), HSV, COLOR_BGR2HSV);
+	cvtColor(im(devices[tag].ROI), HSV, COLOR_BGR2HSV);
 	inRange(HSV,
 		Scalar(
-			max(0, settings.Hue(tag) - settings.thresh),
-			max(0, settings.Sat(tag) - settings.thresh),
-			max(0, settings.Val(tag) - settings.thresh)),
+			max(0, devices[tag].hsv(0) - devices[tag].thresh),
+			max(0, devices[tag].hsv(1) - devices[tag].thresh),
+			max(0, devices[tag].hsv(2) - devices[tag].thresh)),
 		Scalar(
-			min(255, settings.Hue(tag) + settings.thresh),
-			min(255, settings.Sat(tag) + settings.thresh),
-			min(255, settings.Val(tag) + settings.thresh)),
+			min(255, devices[tag].hsv(0) + devices[tag].thresh),
+			min(255, devices[tag].hsv(1) + devices[tag].thresh),
+			min(255, devices[tag].hsv(2) + devices[tag].thresh)),
 		bw);
 	if (morph) {
 		cv::erode(bw, bw, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
@@ -230,24 +239,24 @@ bool camera::DetectObject(cv::Point& pixel, DeviceTag_t tag, const cv::Mat& im, 
 	// if point is on image
 	if (x > 0 && x < settings.imSize.width &&
 		y > 0 && y < settings.imSize.height) {
-		x += settings.ROI.x;
-		y += settings.ROI.y;
+		x += devices[tag].ROI.x;
+		y += devices[tag].ROI.y;
 
 		pixel = Point(x, y);
 
 		// adjust ROI
-		x = max(x - settings.ROIsize, 0);
-		y = max(y - settings.ROIsize, 0);
-		int w = min(2 * settings.ROIsize, settings.imSize.width - x);
-		int h = min(2 * settings.ROIsize, settings.imSize.height - y);
-		settings.ROI = Rect(x, y, w, h);
-		if (settings.ROIsize > 40) settings.ROIsize -= 10;
+		x = max(x - devices[tag].ROIsize, 0);
+		y = max(y - devices[tag].ROIsize, 0);
+		int w = min(2 * devices[tag].ROIsize, settings.imSize.width - x);
+		int h = min(2 * devices[tag].ROIsize, settings.imSize.height - y);
+		devices[tag].ROI = Rect(x, y, w, h);
+		if (devices[tag].ROIsize > 40) devices[tag].ROIsize -= 10;
 		return true;
 	}
 	else {
 		// grow ROI or select whole image
-		if (settings.ROIsize < 200) settings.ROIsize += 10;
-		settings.ROI = Rect(0, 0, settings.imSize.width, settings.imSize.height);
+		if (devices[tag].ROIsize < 200) devices[tag].ROIsize += 10;
+		devices[tag].ROI = Rect(0, 0, settings.imSize.width, settings.imSize.height);
 		return false;
 	}
 }
@@ -283,7 +292,7 @@ void camera::Zero()
 	Stop();
 }
 
-cv::Mat camera::PPTrack(const cv::Point & pix, const cv::Mat &pos)
+cv::Point3d camera::PPTrack(const cv::Point & pix, const cv::Mat &pos)
 {
  // https://math.stackexchange.com/a/1905794
 
@@ -292,7 +301,7 @@ cv::Mat camera::PPTrack(const cv::Point & pix, const cv::Mat &pos)
 	Mat v = pos - settings.Tvec;
 	double t = v.dot(d);
 	Mat P = settings.Tvec + t * d;
-	return P;
+	return Point3d(P);
 }
 
 

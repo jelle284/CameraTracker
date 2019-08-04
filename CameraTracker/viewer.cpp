@@ -1,43 +1,26 @@
 #include "stdafx.h"
 #include "viewer.h"
 
-std::vector<cv::Point3d> viewer::intersect(const std::vector<cam_ctx> &cameras)
+cv::Point3d viewer::intersect(const std::vector<cam_ctx> &cameras)
 {
-	
 	using namespace cv;
-	
-	std::vector<Point3d> Pos3D;
 	std::vector<Mat> tips;
-	unsigned int min_pix_size = cameras[0].pixels.size();
-	for (auto i = 0; i < min_pix_size; ++i) {
-		
-		/* intersect pixel pair */
-		for (auto & cam : cameras) {
-			if (cam.pixels.size() < min_pix_size) return Pos3D;
-			Mat Tip = cam.cm * (Mat_<double>(3, 1) << (double)cam.pixels[i].x, (double)cam.pixels[i].y, 1.0);
-			Tip /= Tip.at<double>(2, 0);
-			Mat rmat(3, 3, CV_64F);
-			Rodrigues(cam.rv, rmat);
-			Mat tip = rmat * Tip + cam.tv;
-			tips.push_back(tip);
-		}
+	/* intersect pixel pair */
 
-		Mat p1 = cameras[0].tv;
-		Mat p2 = cameras[1].tv;
-		Mat d1 = tips.at(0);
-		Mat d2 = tips.at(1);
-		Mat n1 = d1.cross(d2.cross(d1));
-		Mat n2 = d2.cross(d1.cross(d2));
-		Mat p2_p1 = p2 - p1;
-		Mat p1_p2 = p1 - p2;
+	Mat p1 = cameras[0].tv;
+	Mat p2 = cameras[1].tv;
+	Mat d1 = viewer::makeRay(cameras[0]);
+	Mat d2 = viewer::makeRay(cameras[1]);
+	Mat n1 = d1.cross(d2.cross(d1));
+	Mat n2 = d2.cross(d1.cross(d2));
+	Mat p2_p1 = p2 - p1;
+	Mat p1_p2 = p1 - p2;
 
-		Mat c1 = p1 + p2_p1.dot(n2) / d1.dot(n2) * d1;
-		Mat c2 = p2 + p1_p2.dot(n1) / d2.dot(n1) * d2;
-		Mat pos = (c1 + c2) / 2;
-		Pos3D.push_back(Point3d(pos));
-	}
+	Mat c1 = p1 + p2_p1.dot(n2) / d1.dot(n2) * d1;
+	Mat c2 = p2 + p1_p2.dot(n1) / d2.dot(n1) * d2;
+	Mat pos = (c1 + c2) / 2;
 
-	return Pos3D;
+	return Point3d(pos);
 }
 
 /* private */
@@ -72,20 +55,17 @@ void viewer::drawCoordinateSystem(cv::Mat rv, cv::Mat tv, double unit_len, int t
 void viewer::drawCameras(const std::vector<cam_ctx> &cameras)
 {
 	using namespace cv;
-
-	std::vector<Mat> Pos3D;
 	
 	for (auto & cam : cameras) {
 		/* draw coordinate systems*/
 		this->drawCoordinateSystem(cam.rv, cam.tv, 0.4, 1);
 
-		/* draw rays */
-		for (auto i = 0; i < cam.pixels.size(); ++i) {
-			this->drawPixel(cam.cm, cam.rv, cam.tv, cam.pixels[i]);
-		}
+		/* draw ray */
+		this->drawPixel(cam);
 	}
 	/* intersect */
-	std::vector<Point3d> Result = intersect(cameras);
+	std::vector<Point3d> Result;
+	Result.push_back(intersect(cameras));
 	if (Result.size()) {
 		std::vector<Point2d> result;
 		projectPoints(Result, m_rv, m_tv, m_cm, m_dc, result);
@@ -95,22 +75,64 @@ void viewer::drawCameras(const std::vector<cam_ctx> &cameras)
 	}
 }
 
-void viewer::drawPixel(const cv::Mat& cm, const cv::Mat& rv, const cv::Mat& tv, const cv::Point& pixel)
+void viewer::drawPoint(cv::Point3d p)
+{
+	using namespace cv;
+	std::vector<Point3d> pos3d;
+	pos3d.push_back(p);
+	std::vector<Point2d> pos2d;
+	projectPoints(pos3d, m_rv, m_tv, m_cm, m_dc, pos2d);
+	for (auto & point : pos2d) {
+		cv::circle(m_canvas, point, 3, Scalar(0, 0, 255), 2);
+	}
+}
+
+cv::Mat viewer::makeRay(const cam_ctx & cam)
+{
+	using namespace cv;
+	Mat Tip = cam.cm * (Mat_<double>(3, 1) << (double)cam.pixel.x, (double)cam.pixel.y, 1.0);
+	Tip /= Tip.at<double>(2, 0);
+	Mat rmat(3, 3, CV_64F);
+	Rodrigues(cam.rv, rmat);
+	Mat ray = rmat * Tip;
+	return ray;
+}
+
+void viewer::drawPPD(const cam_ctx & cam, const cv::Point3d & pos)
+{
+	using namespace cv;
+	if (cam.pixel.x > 0 & cam.pixel.x < 640 & cam.pixel.y > 0 & cam.pixel.y < 480) {
+		std::vector<Point3d> ShortestLine;
+		ShortestLine.push_back(pos);
+		ShortestLine.push_back(getPPD(cam, pos));
+		std::vector<Point2d> shortestLine;
+		projectPoints(ShortestLine, m_rv, m_tv, m_cm, m_dc, shortestLine);
+		arrowedLine(m_canvas, shortestLine.at(0), shortestLine.at(1), Scalar(0, 255, 255), 2);
+	}
+}
+
+cv::Point3d viewer::getPPD(const cam_ctx & cam, const cv::Point3d & pos)
+{
+	using namespace cv;
+	Mat v = Mat(pos) - cam.tv;
+	Mat d = makeRay(cam);
+	double t = v.dot(d);
+	Mat P = cam.tv + t * d;
+	return Point3d(P);
+}
+
+void viewer::drawPixel(const cam_ctx & cam)
 {
 	using namespace cv;
 	
-	if (pixel.x > 0 & pixel.x < 640 & pixel.y > 0 & pixel.y < 480) {
-		Mat Tip = cm * (Mat_<double>(3, 1) << (double)pixel.x, (double)pixel.y, 1.0);
-		Tip /= Tip.at<double>(2, 0);
-		Mat rmat(3, 3, CV_64F);
-		Rodrigues(rv, rmat);
-		Mat tip = rmat * Tip + tv;
+	if (pixelRangeCheck(cam.pixel)) {
+		Mat tip = makeRay(cam) + cam.tv;
 		std::vector<Point3d> Arrow;
-		Arrow.push_back(Point3d(tv));
+		Arrow.push_back(Point3d(cam.tv));
 		Arrow.push_back(Point3d(tip));
 		std::vector<Point2d> arrow;
 		projectPoints(Arrow, m_rv, m_tv, m_cm, m_dc, arrow);
-		arrowedLine(m_canvas, arrow.at(0), arrow.at(1), Scalar(255, 0, 0), 1);
+		arrowedLine(m_canvas, arrow.at(0), arrow.at(1), Scalar(255, 255, 0), 2);
 	}
 }
 
@@ -171,7 +193,7 @@ void viewer::on_mouse(int e, int x, int y, int d, void *ptr)
 }
 
 /* public */
-viewer::viewer() : zoomdist(2.0), focallen(500)
+viewer::viewer() : zoomdist(2.0), focallen(600)
 {
 	using namespace cv;
 	double* cm_ = new double[9]{ focallen, 0, focallen / 2, 0, focallen, focallen / 2, 0, 0, 1 };
@@ -188,26 +210,20 @@ viewer::~viewer()
 {
 }
 
-void viewer::draw(const cam_ctx& cam, const cv::Point& pix)
-{
-	using namespace cv;
-	drawCoordinateSystem(cam.rv, cam.tv, 0.6, 1);
-	drawPixel(cam.cm, cam.rv, cam.tv, pix);
-}
 
 void viewer::clear()
 {
 	using namespace cv;
-	m_canvas = cv::Mat::zeros(600, 600, CV_8UC3);
+	m_canvas = cv::Mat::zeros(800, 800, CV_8UC3);
 	m_rv = getAngles();
 	drawCoordinateSystem(Mat::zeros(3, 1, CV_64F), Mat::zeros(3, 1, CV_64F), 1.00);
 }
 
-void viewer::show()
+void viewer::show(std::string winname)
 {
 	using namespace cv;
-	imshow("viewer", m_canvas);
-	setMouseCallback("viewer", on_mouse, &mousectx);
+	imshow(winname, m_canvas);
+	setMouseCallback(winname, on_mouse, &mousectx);
 }
 
 cv::Mat viewer::getAngles()

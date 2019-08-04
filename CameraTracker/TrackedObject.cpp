@@ -4,7 +4,6 @@
 
 TrackedObject::TrackedObject(DeviceTag_t tag) :
 	m_tag(tag), m_color(LED_OFF),
-	wp(1.0f), wm(1.0f),
 	bDMP(true)
 {
 	cvP = cv::Mat::eye(6, 6, CV_64F);
@@ -30,26 +29,6 @@ TrackedObject::TrackedObject(DeviceTag_t tag) :
 		MagScale.fill(1.0f);
 		savedata();
 	}
-
-	// camera / position filter
-	float dt = 0.033;
-	A <<
-		1, 0, 0, dt, 0, 0,
-		0, 1, 0, 0, dt, 0,
-		0, 0, 1, 0, 0, dt,
-		0, 0, 0, 1, 0, 0,
-		0, 0, 0, 0, 1, 0,
-		0, 0, 0, 0, 0, 1;
-	Pk.setIdentity();
-	B <<
-		0.5*dt*dt, 0, 0,
-		0, 0.5*dt*dt, 0,
-		0, 0, 0.5*dt*dt,
-		0, 0, 0,
-		0, 0, 0,
-		0, 0, 0;
-
-	u.setZero();
 
 	for (int i = 0; i < 3; ++i) {
 		m_pose.ang_vel[i] = 0.0f;
@@ -188,31 +167,23 @@ void TrackedObject::TimerCallbackIMU()
 
 		WriteData(read_req, sizeof(read_req));
 		if (ReadData((char*)&scaled_data, sizeof(scaled_data)) == sizeof(scaled_data)) {
-			Eigen::Matrix<float, 9, 1> acc_gyro_mag(scaled_data.imu);
-			// magdwick algorithm:
-			AHRS.timing();
-			AHRS.update(
-				acc_gyro_mag(3), acc_gyro_mag(4), acc_gyro_mag(5),
-				acc_gyro_mag(0), acc_gyro_mag(1), acc_gyro_mag(2),
-				acc_gyro_mag(6), acc_gyro_mag(7), acc_gyro_mag(8)
-			);
+			Eigen::Quaternionf q(scaled_data.imu[9], scaled_data.imu[10], scaled_data.imu[11], scaled_data.imu[12]);
+			Eigen::Quaternionf qn = q_zero * q;
 
-			Eigen::Quaternionf q = q_zero * Eigen::Quaternionf(AHRS.q0, AHRS.q1, AHRS.q2, AHRS.q3);
-
-			m_pose.q[0] = q.w();
-			m_pose.q[1] = q.x();
-			m_pose.q[2] = q.y();
-			m_pose.q[3] = q.z();
+			m_pose.q[0] = qn.w();
+			m_pose.q[1] = qn.x();
+			m_pose.q[2] = qn.y();
+			m_pose.q[3] = qn.z();
 
 			if (m_bZero) {
-				q_zero = Eigen::Quaternionf(AHRS.q0, AHRS.q1, AHRS.q2, AHRS.q3).conjugate();
+				q_zero = q.conjugate();
 				m_bZero = false;
 			}
 
 			// buttons
 			memcpy(m_buttons.axis, scaled_data.analogs, sizeof(m_buttons.axis));
 			for (auto btn = 0; btn < BUTTON_COUNT; ++btn) {
-				m_buttons.ButtonState[btn] = ( scaled_data.buttons == (btn + 1) );
+				m_buttons.ButtonState[btn] = (scaled_data.buttons == (btn + 1));
 			}
 		}
 	}
@@ -220,6 +191,7 @@ void TrackedObject::TimerCallbackIMU()
 
 void TrackedObject::TimerCallbackCam(camera& cam)
 {
+	/*
 	const int n = 6;
 	using namespace Eigen;
 	cv::Point pixel;
@@ -266,6 +238,7 @@ void TrackedObject::TimerCallbackCam(camera& cam)
 			m_pose.pos[i]	=	x(i + 3);
 		}
 	}
+	*/
 }
 
 bool TrackedObject::HandShake()
@@ -416,7 +389,7 @@ void TrackedObject::CalibrateMag()
 	using namespace Eigen;
 	viewer v;
 
-	const int sample_len = 2000;
+	const int sample_len = 1600;
 	Matrix<int16_t, 3, sample_len> buffer;
 	
 	// zero calib
@@ -461,14 +434,15 @@ void TrackedObject::CalibrateMag()
 		v.clear();
 		for (int ii = 0; ii < i; ++ii)
 			v.drawMag(cv::Vec3s(buffer(0, ii), buffer(1, ii), buffer(2, ii)));
-		v.show();
+		v.show("magnetometer");
 		if (cv::waitKey(30) == VK_ESCAPE) break;
 	}
+	cv::destroyWindow("magnetometer");
 }
 
 void TrackedObject::CalibrateAccGyro()
 {
-	const int sample_len = 100;
+	const int sample_len = 400;
 	using namespace Eigen;
 	Matrix<int16_t, 6, sample_len> buffer;
 	GyroBias.setZero();
@@ -497,4 +471,54 @@ void TrackedObject::CalibrateAccGyro()
 		j++;
 		Sleep(20);
 	}
+}
+
+kalman_t::kalman_t() : wp(0.1f), wm(0.1f)
+{
+	float dt = 0.033;
+	A <<
+		1, 0, 0, dt, 0, 0,
+		0, 1, 0, 0, dt, 0,
+		0, 0, 1, 0, 0, dt,
+		0, 0, 0, 1, 0, 0,
+		0, 0, 0, 0, 1, 0,
+		0, 0, 0, 0, 0, 1;
+
+	Pk.setIdentity();
+
+	B <<
+		0.5*dt*dt, 0, 0,
+		0, 0.5*dt*dt, 0,
+		0, 0, 0.5*dt*dt,
+		0, 0, 0,
+		0, 0, 0,
+		0, 0, 0;
+
+	C << 
+		0, 0, 0, 1, 0, 0,
+		0, 0, 0, 0, 1, 0,
+		0, 0, 0, 0, 0, 1;
+
+	u.setZero();
+}
+
+void kalman_t::update(Eigen::Vector3f pos3d)
+{
+	using namespace std::chrono;
+	auto now = steady_clock::now();
+	float elapsed = duration_cast<duration<float>>(now - time_ms).count();
+	time_ms = now;
+	
+	using namespace Eigen;
+	A.block(0, 3, 3, 3) = Matrix3f::Identity()*elapsed;
+	B.block(0, 0, 3, 3) = Matrix3f::Identity()*0.5*elapsed*elapsed;
+
+	Matrix<float, 6, 1>  x_ = A * x + B * u;
+	Matrix<float, 6, 6> Pk_ = A * Pk *A.transpose() + Matrix<float, 6, 6>::Identity() * wp;
+	Vector3f y = pos3d - C * x_;
+	Matrix3f S = C * Pk_ * C.transpose() + Matrix3f::Identity() * wm;
+	Matrix<float,6,3> K = Pk_ * C.transpose()*S.inverse();
+
+	x = x_ + K * y;
+	Pk = (Matrix<float, 6, 6>::Identity() - K * C)*Pk_;
 }

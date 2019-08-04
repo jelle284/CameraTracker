@@ -2,24 +2,38 @@
 #include "opencv2/opencv.hpp"
 #include "UKF.h"
 
+#define CAMERA_DEFAULT_HEIGHT	480
+#define CAMERA_DEFAULT_WIDTH	640
+
+
+
 class camera
 {
 public:
+	struct device_ctx {
+		cv::Vec3b hsv;
+		int ROIsize, thresh;
+		cv::Rect ROI;
+		device_ctx() :
+			ROI(0, 0, CAMERA_DEFAULT_WIDTH, CAMERA_DEFAULT_HEIGHT),
+			thresh(30), ROIsize(200),
+			hsv(0,0,0)
+		{}
+	};
+
+	device_ctx devices[DEVICE_COUNT];
 	double v, w; // proces and measurement noise
+
 	// Container for camera information
 	struct settings_t {
-		cv::Vec3i Hue, Sat, Val;
-		cv::Rect ROI; // region of interest
-		int ROIsize, thresh, fps, gain, exposure;
+		int fps, gain, exposure;
 		cv::Mat CamMat, RotMat, Tvec, DistCoef;
 		cv::Size imSize;
-		// initializer
 		settings_t() :
-			ROIsize(100), thresh(30), imSize(cv::Size(640,480)),
+			imSize(cv::Size(CAMERA_DEFAULT_WIDTH, CAMERA_DEFAULT_HEIGHT)),
 			fps(30), gain(20), exposure(30)
 		{
 			using namespace cv;
-			ROI = Rect(0, 0, imSize.width, imSize.height);
 			RotMat = Mat::eye(3, 3, CV_64F);
 			Tvec = Mat::zeros(3, 1, CV_64F);
 			CamMat = Mat::eye(3, 3, CV_64F);
@@ -32,6 +46,7 @@ public:
 		cv::Point Position;
 		bool MouseUpdate;
 	};
+
 	UKF::Camera CameraModel;
 	std::wstring debugstring;
 private:
@@ -72,7 +87,7 @@ public:
 
 	//
 
-	cv::Mat PPTrack(const cv::Point & pix, const cv::Mat &pos);
+	cv::Point3d PPTrack(const cv::Point & pix, const cv::Mat &pos);
 
 private:
 	virtual void ApplyUserParams();
