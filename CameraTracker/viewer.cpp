@@ -111,11 +111,15 @@ void viewer::drawPPD(const cam_ctx & cam, const cv::Point3d & pos)
 	}
 }
 
+/* Get Perpendicular intersect from prev position
+* https://math.stackexchange.com/a/1905794
+*/
 cv::Point3d viewer::getPPD(const cam_ctx & cam, const cv::Point3d & pos)
 {
 	using namespace cv;
+	Mat ray = makeRay(cam);
+	Mat d = (ray) / norm(ray);
 	Mat v = Mat(pos) - cam.tv;
-	Mat d = makeRay(cam);
 	double t = v.dot(d);
 	Mat P = cam.tv + t * d;
 	return Point3d(P);

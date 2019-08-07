@@ -25,7 +25,9 @@ public:
 	kalman_t();
 	void begin_timing() { time_ms = std::chrono::steady_clock::now(); }
 	void update(Eigen::Vector3f pos3d);
+	void getLinearAcc(Eigen::Quaternionf qrot, Eigen::Vector3f Gravity, Eigen::Vector3f accelerometer);
 	void getPos(float* px, float* py, float *pz) { *px = x(3); *py = x(4); *pz = x(5); }
+	void getVel(float* vx, float* vy, float *vz) { *vx = x(0); *vy = x(1); *vz = x(2); }
 	void fromSliders(float sld1, float sld2) { wp = sld1; wm = sld2; }
 };
 

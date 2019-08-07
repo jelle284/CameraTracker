@@ -1,11 +1,14 @@
 #pragma once
 #include "stdafx.h"
-//#include "PSEye.h"
 #include "MySocket.h"
+//#include "PSEye.h"
+#include "LibPSEye.h"
 #include "HeadMountDisplay.h"
 #include "HandController.h"
 #include "viewer.h"
 #include "DlgHandController.h"
+
+#define USE_PS3EYEDRIVER
 
 // Some global vars
 // ================
@@ -165,8 +168,95 @@ void UpdatePose(TrackedObject* pDevice) {
 }
  
 /* viewer */
-viewer Viewer;
 std::vector<cam_ctx> Cam_ctx;
+viewer Viewer;
 
 /* Dialogs */
 DlgHandController dlgHandController(&SocketHost);
+
+/* camera tracking thread */
+bool cameraHealth; // not working
+
+std::thread* pCamThread;
+
+void cameraThread() {
+	while (bRunning) {
+		std::vector<cv::Mat> images;
+		for (auto & cam : CameraList)
+			images.push_back(cam->FrameCapture());
+
+		Viewer.clear();
+		for (auto & device : DeviceList) {
+			float x, y, z;
+			for (int i = 0; i < std::min(images.size(), CameraList.size()); ++i) {
+				{
+					if (CameraList[i]->DetectObject(Cam_ctx.at(i).pixel, device->m_tag, images.at(i))) {
+						//std::vector<cv::Point2f> in, out;
+						//in.push_back(Cam_ctx.at(i).pixel);
+						//cv::undistortPoints(in, out, CameraList[i]->GetSettings().CamMat,
+						//	CameraList[i]->GetSettings().DistCoef);
+						//Cam_ctx.at(i).pixel = out[0];
+						Viewer.drawPixel(Cam_ctx.at(i));
+						device->kf.getPos(&x, &y, &z);
+						auto pos = Viewer.getPPD(Cam_ctx[i], cv::Point3d(x, y, z));
+						device->kf.update(Eigen::Vector3f(pos.x, pos.y, pos.z));
+					}
+				}
+			}
+			device->kf.getPos(&x, &y, &z);
+			Viewer.drawPoint(cv::Point3d(x, y, z));
+			device->m_pose.pos[0] = x;
+			device->m_pose.pos[1] = y;
+			device->m_pose.pos[2] = z;
+			/*
+			* Velocity unstable
+			float vx, vy, vz;
+			device->kf.getVel(&vx, &vy, &vz);
+			device->m_pose.vel[0] = vx;
+			device->m_pose.vel[1] = vy;
+			device->m_pose.vel[2] = vz;
+			*/
+
+		}
+		Viewer.show("camera tracking");
+		cameraHealth = true;
+		cv::waitKey(10);
+	}
+}
+
+/* Fill entries in camera list */
+void initCameraList() {
+#ifdef USE_CL_DRIVER
+	camera_count = CLEyeGetCameraCount();
+	if (camera_count) {
+		bCameraConnected = true;
+		for (int i = 0; i < camera_count; i++) {
+			CameraList.push_back(new PSEye(i, 30));
+		}
+	}
+	else {
+		bCameraConnected = false;
+		bRotationOnly = true;
+	}
+#endif
+#ifdef USE_PS3EYEDRIVER
+	{
+		std::vector<ps3eye::PS3EYECam::PS3EYERef> devices = ps3eye::PS3EYECam::getDevices();
+		camera_count = devices.size();
+		if (camera_count) {
+			bCameraConnected = true;
+			for (int i = 0; i < camera_count; ++i) {
+				CameraList.push_back(new LibPSEye(devices.at(i), i));
+			}
+		}
+	}
+#endif
+}
+
+void cameraReset() {
+	for (auto & cam : CameraList)
+		delete cam;
+	CameraList.clear();
+	initCameraList();
+}
+

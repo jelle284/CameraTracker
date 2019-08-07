@@ -145,16 +145,16 @@ Eigen::Matrix<float, 9, 1> TrackedObject::ScaleRawData(imu_packet_t imu_packet)
 
 void TrackedObject::TimerCallbackIMU()
 {
-	
+	Eigen::Quaternionf qn;
 	if (bDMP) {
 		HmdQuaternionf_t quat;
 		WriteData("dmp", 4);
 		if (ReadData((char*)&quat, sizeof(quat)) == sizeof(quat)) {
-			Eigen::Quaternionf q = q_zero * Eigen::Quaternionf(quat.w, quat.x, quat.y, quat.z);
-			m_pose.q[0] = q.w();
-			m_pose.q[1] = q.x();
-			m_pose.q[2] = q.y();
-			m_pose.q[3] = q.z();
+			qn = q_zero * Eigen::Quaternionf(quat.w, quat.x, quat.y, quat.z);
+			m_pose.q[0] = qn.w();
+			m_pose.q[1] = qn.x();
+			m_pose.q[2] = qn.y();
+			m_pose.q[3] = qn.z();
 			if (m_bZero) {
 				q_zero = Eigen::Quaternionf(quat.w, quat.x, quat.y, quat.z).conjugate();
 				m_bZero = false;
@@ -168,7 +168,7 @@ void TrackedObject::TimerCallbackIMU()
 		WriteData(read_req, sizeof(read_req));
 		if (ReadData((char*)&scaled_data, sizeof(scaled_data)) == sizeof(scaled_data)) {
 			Eigen::Quaternionf q(scaled_data.imu[9], scaled_data.imu[10], scaled_data.imu[11], scaled_data.imu[12]);
-			Eigen::Quaternionf qn = q_zero * q;
+			qn = q_zero * q;
 
 			m_pose.q[0] = qn.w();
 			m_pose.q[1] = qn.x();
@@ -187,6 +187,7 @@ void TrackedObject::TimerCallbackIMU()
 			}
 		}
 	}
+	
 }
 
 void TrackedObject::TimerCallbackCam(camera& cam)
@@ -521,4 +522,9 @@ void kalman_t::update(Eigen::Vector3f pos3d)
 
 	x = x_ + K * y;
 	Pk = (Matrix<float, 6, 6>::Identity() - K * C)*Pk_;
+}
+
+void kalman_t::getLinearAcc(Eigen::Quaternionf qrot, Eigen::Vector3f Gravity, Eigen::Vector3f accelerometer)
+{
+	u = qrot.conjugate()._transformVector(accelerometer) - Gravity;
 }

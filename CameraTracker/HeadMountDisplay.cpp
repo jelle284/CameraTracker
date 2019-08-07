@@ -18,7 +18,7 @@ HeadMountDisplay::HeadMountDisplay() :
 			delete CurrentPort;
 		}
 	}
-	m_color = LED_RED;
+	m_color = LED_GREEN;
 }
 
 HeadMountDisplay::~HeadMountDisplay()

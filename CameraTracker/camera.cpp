@@ -216,7 +216,8 @@ void camera::textbox(const std::string &text)
 
 bool camera::DetectObject(cv::Point& pixel, DeviceTag_t tag, const cv::Mat& im, bool morph) {
 	using namespace cv;
-	Mat bw, HSV;
+	Mat bw, HSV, ud;
+	//undistort(im, ud, settings.CamMat, settings.DistCoef);
 	cvtColor(im(devices[tag].ROI), HSV, COLOR_BGR2HSV);
 	inRange(HSV,
 		Scalar(
@@ -390,7 +391,7 @@ void camera::calibrateIntrinsics()
 	ofs.close();
 }
 
-bool camera::calibrateChess() {
+bool camera::calibrateChess(eCalibAngle angle) {
 	using namespace cv;
 	this->autoSettings();
 	std::vector<cv::Point2d> chess_points;
@@ -400,7 +401,20 @@ bool camera::calibrateChess() {
 	double chess_size = 0.025;
 	std::vector<cv::Point3d> model_points;
 	for (int i = 0; i < 9; i++) {
-		for (int j = 0; j < 6; j++) model_points.push_back(cv::Point3d(chess_size*j, chess_size*i, 0));
+		for (int j = 0; j < 6; j++) {
+			switch (angle) {
+			case front:
+				model_points.push_back(cv::Point3d(chess_size*j, chess_size*i, 0));
+				break;
+			case from_left:
+				model_points.push_back(cv::Point3d(0, chess_size*i, chess_size*j));
+				break;
+			case from_right:
+				model_points.push_back(cv::Point3d(0, chess_size*i, -chess_size*i));
+				break;
+				
+			}
+		}
 	}
 
 	// Start cam
@@ -408,9 +422,9 @@ bool camera::calibrateChess() {
 	bool found = false, exit = false;
 	while (1) {
 		Mat im = FrameCapture();
-		
+		// | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE
 		found = findChessboardCorners(im, Size(6, 9), chess_points,
-			CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_FILTER_QUADS);
+			CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FILTER_QUADS);
 
 		if (found) {
 			Mat r, t;

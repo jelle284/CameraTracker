@@ -10,6 +10,12 @@
 class camera
 {
 public:
+	enum eCalibAngle {
+		front,
+		from_left,
+		from_right,
+		calib_angle_count
+	};
 	struct device_ctx {
 		cv::Vec3b hsv;
 		int ROIsize, thresh;
@@ -76,7 +82,7 @@ public:
 	//
 	void Adjust(const DeviceTag_t &tag);
 	void calibrateIntrinsics();
-	bool calibrateChess();
+	bool calibrateChess(eCalibAngle angle = front);
 	void calibrateMouse();
 	void savefile();
 	void loadfile();
