@@ -51,15 +51,7 @@ void DlgHandController::_getValues(char FC, char ADDR, char LEN, int16_t* buffer
 void DlgHandController::flush()
 {
 	Sleep(50);
-	char flush_req[] = { 0x60, 0x00, 0x00 };
-	pSocket->Send(m_tag, flush_req, sizeof(flush_req));
-	char waste_buffer[64];
-	int i = 0;
-	while (pSocket->Read(m_tag, waste_buffer, sizeof(waste_buffer))) { 
-		Sleep(20); 
-		if (++i > 200)
-			break;
-	}
+	pSocket->flush(m_tag);
 }
 
 void DlgHandController::upload_to()
@@ -151,6 +143,7 @@ std::wstring DlgHandController::print_raw()
 	wss << adc_buffer[0] << ", " << adc_buffer[1] << ", " << adc_buffer[2] << ", " << adc_buffer[3];
 	return wss.str();
 }
+
 //												Dialog callback
 /* =========================================================================================== */
 INT_PTR CALLBACK cb_DlgHandController(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)

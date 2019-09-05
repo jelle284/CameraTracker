@@ -161,11 +161,33 @@ void viewer::drawMag(cv::Vec3d raw)
 	
 	//Vec3d n = normalize(raw);
 	Vec3d n = raw / 20000;
+	
 	std::vector<Point3d> Arrow;
 	Arrow.push_back(n);
 	std::vector<Point2d> arrow;
 	projectPoints(Arrow, m_rv, m_tv, m_cm, m_dc, arrow);
 	putText(m_canvas, "x", arrow[0], FONT_HERSHEY_PLAIN, 2, Scalar(255, 255, 255));
+	
+
+}
+
+void viewer::plot2D(std::vector<cv::Point2f> points, float zoom, std::string winname)
+{
+	using namespace cv;
+	const int cx = 400, cy = 400;
+	Mat im = Mat::zeros(800, 800, CV_8UC3);
+	im.setTo(Scalar(255, 255, 255));
+
+	for (auto n : points) {
+		Point pp(cx + zoom * n.x, cy - zoom * n.y);
+		circle(im, n, 2, Scalar(255, 0, 0), 2);
+	}
+
+	arrowedLine(im, Point(cx, cy), Point(cx+300, cy), Scalar(50, 50, 50), 2);
+	arrowedLine(im, Point(cx, cy), Point(cx, cy-300), Scalar(50, 50, 50), 2);
+	imshow(winname, im);
+	waitKey();
+	destroyWindow(winname);
 }
 
 /* static */

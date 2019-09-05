@@ -35,6 +35,7 @@ public:
 	void clear();
 	void show(std::string winname);
 
+	void plot2D(std::vector<cv::Point2f> points, float zoom=1.0f, std::string winname = "plot");
 
 	cv::Point3d getPPD(const cam_ctx & cam, const cv::Point3d & pos);
 	static cv::Point3d intersect(const std::vector<cam_ctx> &cameras);

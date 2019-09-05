@@ -78,7 +78,10 @@
     <ClInclude Include="DlgHandController.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BasicDialog.h">
+    <ClInclude Include="DlgSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="string_conversion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -134,7 +137,7 @@
     <ClCompile Include="DlgHandController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="BasicDialog.cpp">
+    <ClCompile Include="DlgSettings.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

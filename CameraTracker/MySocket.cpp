@@ -125,3 +125,16 @@ LPARAM MySocket::getIP(DeviceTag_t tag)
 {
 	return _byteswap_ulong(Address[tag].sin_addr.S_un.S_addr);
 }
+
+void MySocket::flush(DeviceTag_t tag)
+{
+	char flush_req[] = { 0x60, 0x00, 0x00 };
+	Send(tag, flush_req, sizeof(flush_req));
+	char waste_buffer[64];
+	int i = 0;
+	while (Read(tag, waste_buffer, sizeof(waste_buffer)) > 0) {
+		Sleep(100);
+		if (++i > 2000)
+			break;
+	}
+}

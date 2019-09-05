@@ -7,3 +7,7 @@ CameraTracker/CameraTracker.vcxproj.user
 overblik i rodet.pptx
 CameraTracker/BasicDialog.h
 CameraTracker/BasicDialog.cpp
+CameraTracker/camera_0.yml
+CameraTracker/camera_1.yml
+CameraTracker/rhcfile.csv
+CameraTracker/lhcfile.csv

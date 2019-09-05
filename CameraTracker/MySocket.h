@@ -19,7 +19,7 @@ public:
 	int Read(DeviceTag_t tag, char* buffer, int nbChar);
 	void SetIP(DeviceTag_t tag, const char * ip);
 	std::string FindControllers();
-
+	void flush(DeviceTag_t tag);
 	bool IdStatus[DEVICE_COUNT];
 	LPARAM getIP(DeviceTag_t tag);
 };

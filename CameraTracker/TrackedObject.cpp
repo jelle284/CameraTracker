@@ -175,16 +175,24 @@ void TrackedObject::TimerCallbackIMU()
 			m_pose.q[2] = qn.y();
 			m_pose.q[3] = qn.z();
 
+			kf.predict();
+			kf.update();
+			kf.getLinearAcc(qn, Gravity, 
+				Eigen::Vector3f(
+					scaled_data.imu[0],
+					scaled_data.imu[1],
+					scaled_data.imu[2]));
+
 			if (m_bZero) {
 				q_zero = q.conjugate();
 				m_bZero = false;
 			}
 
 			// buttons
-			memcpy(m_buttons.axis, scaled_data.analogs, sizeof(m_buttons.axis));
-			for (auto btn = 0; btn < BUTTON_COUNT; ++btn) {
+			for (auto ax = 0; ax < ANALOG_COUNT; ++ax)
+				m_buttons.axis[ax] = scaled_data.analogs[ax];
+			for (auto btn = 0; btn < BUTTON_COUNT; ++btn)
 				m_buttons.ButtonState[btn] = (scaled_data.buttons == (btn + 1));
-			}
 		}
 	}
 	
@@ -385,7 +393,7 @@ bool TrackedObject::loaddata()
 	return bSuccess;
 }
 
-void TrackedObject::CalibrateMag()
+bool TrackedObject::CalibrateMag()
 {
 	using namespace Eigen;
 	viewer v;
@@ -411,9 +419,9 @@ void TrackedObject::CalibrateMag()
 				auto mag_max = buffer.rowwise().maxCoeff();
 				auto mag_min = buffer.rowwise().minCoeff();
 				magbias = (mag_max + mag_min) / 2;
-				MagScale = (mag_max - mag_min).cast<float>() / 2;
-				for (int i = 0; i<3; ++i)
-					MagScale(i) = MagScale.mean() / MagScale(i);
+				auto avg_delta = (mag_max - mag_min).cast<float>() / 2;
+				for (int i = 0; i < 3; ++i)
+					MagScale(i) = avg_delta.mean() / avg_delta(i);
 				savedata();
 				{	// write mag scale
 					char write_buffer[15], write_req[] = { 0x21, 0x10, 3 };
@@ -439,44 +447,115 @@ void TrackedObject::CalibrateMag()
 		if (cv::waitKey(30) == VK_ESCAPE) break;
 	}
 	cv::destroyWindow("magnetometer");
+
+	// plot values
+	const int cx = 400, cy = 400;
+	cv::Mat im = cv::Mat::zeros(800, 800, CV_8UC3);
+	const float pixel_scale = 0.01;
+
+	im.setTo(cv::Scalar(255, 255, 255));
+	arrowedLine(im, cv::Point(cx, cy), cv::Point(cx + 300, cy), cv::Scalar(50, 50, 50), 2);
+	arrowedLine(im, cv::Point(cx, cy), cv::Point(cx, cy - 300), cv::Scalar(50, 50, 50), 2);
+
+	for (int n = 0; n < sample_len; ++n) {
+		float x, y, z;
+
+		x = pixel_scale * buffer.cast<float>()(0, n);
+		y = pixel_scale * buffer.cast<float>()(1, n);
+		z = pixel_scale * buffer.cast<float>()(2, n);
+
+		cv::Point xy(cx + x, cy - y);
+		cv::Point yz(cx + y, cy - z);
+		cv::Point zx(cx + z, cy - x);
+
+		circle(im, xy, 2, cv::Scalar(255, 0, 0), 2);
+		circle(im, yz, 2, cv::Scalar(0, 255, 0), 2);
+		circle(im, zx, 2, cv::Scalar(0, 0, 255), 2);
+	}
+	
+	cv::imshow("before", im);
+
+	im.setTo(cv::Scalar(255, 255, 255));
+	arrowedLine(im, cv::Point(cx, cy), cv::Point(cx + 300, cy), cv::Scalar(50, 50, 50), 2);
+	arrowedLine(im, cv::Point(cx, cy), cv::Point(cx, cy - 300), cv::Scalar(50, 50, 50), 2);
+
+	for (int n = 0; n < sample_len; ++n) {
+		float x, y, z;
+
+		Matrix<float, 3, 1> unbias = (buffer.col(n) - magbias).cast<float>();
+		x = MagScale(0) * pixel_scale * unbias(0);
+		y = MagScale(1) * pixel_scale * unbias(1);
+		z = MagScale(2) * pixel_scale * unbias(2);
+
+		cv::Point xy(cx + x, cy - y);
+		cv::Point yz(cx + y, cy - z);
+		cv::Point zx(cx + z, cy - x);
+
+		circle(im, xy, 2, cv::Scalar(255, 0, 0), 2);
+		circle(im, yz, 2, cv::Scalar(0, 255, 0), 2);
+		circle(im, zx, 2, cv::Scalar(0, 0, 255), 2);
+	}
+
+	cv::imshow("after", im);
+	return true;
 }
 
-void TrackedObject::CalibrateAccGyro()
+bool TrackedObject::CalibrateSteady()
 {
-	const int sample_len = 400;
+	const int sample_len = 200, max_iter = 1000;
+	int i, j;
 	using namespace Eigen;
-	Matrix<int16_t, 6, sample_len> buffer;
+	Matrix<int16_t, 3, sample_len> gyro_buffer;
+	Matrix<float, 3, sample_len> acc_buffer;
 	GyroBias.setZero();
 	Gravity << 0.0f, 9.81f, 0.0f;
-	int i = 0, j = 0;
-	while (j < 2 * sample_len) {
-		int16_t imu_data[6];
-		char read_req[3] = { 0x12, 0x00, 6 };
+
+	i = 0;
+	j = 0;
+	while (1) {
+		int16_t gyro_raw[3];
+		char read_req[3] = { 0x12, 0x03, 3 };
 		WriteData(read_req, sizeof(read_req));
-		if (ReadData((char*)&imu_data, sizeof(imu_data)) == sizeof(imu_data)) {
-			buffer.col(i) = Matrix<int16_t, 6, 1>(imu_data);
-			i++;
-			if (i == sample_len) {
-				gyrobias = buffer.rowwise().mean().tail(3);
-				Gravity = buffer.cast<float>().rowwise().mean().head(3);
-				savedata();
-				{	// write gyro bias
-					char write_buffer[9], write_req[] = { 0x21, 0x40, 3 };
-					memcpy(write_buffer, write_req, 3);
-					memcpy(write_buffer + 3, gyrobias.data(), 6);
-					WriteData(write_buffer, 9);
-				}
-				break;
-			}
+		if (ReadData((char*)&gyro_raw, sizeof(gyro_raw)) == sizeof(gyro_raw)) {
+			gyro_buffer.col(i) = Matrix<int16_t, 3, 1>(gyro_raw);
+			++i;
 		}
-		j++;
 		Sleep(20);
+		++j;
+
+		if (i == sample_len) break;
+		if (j == max_iter) return false;
 	}
+	gyrobias = gyro_buffer.rowwise().mean();
+	{	// write gyro bias
+		char write_buffer[9], write_req[] = { 0x21, 0x40, 3 };
+		memcpy(write_buffer, write_req, 3);
+		memcpy(write_buffer + 3, gyrobias.data(), 6);
+		WriteData(write_buffer, 9);
+	}
+
+	i = 0;
+	j = 0;
+	while (1) {
+		float acc_scaled[3];
+		char read_req[3] = { 0x10, 0x10, 3 };
+		WriteData(read_req, sizeof(read_req));
+		if (ReadData((char*)&acc_scaled, sizeof(acc_scaled)) == sizeof(acc_scaled)) {
+			acc_buffer.col(i) = Vector3f(acc_scaled);
+			++i;
+		}
+		Sleep(20);
+		++j;
+
+		if (i == sample_len) break;
+		if (j == max_iter) return false;
+	}
+	Gravity = acc_buffer.rowwise().mean();
+	savedata();
 }
 
-kalman_t::kalman_t() : wp(0.1f), wm(0.1f)
+kalman_t::kalman_t(float dt) : wp(0.1f), wm(0.1f)
 {
-	float dt = 0.033;
 	A <<
 		1, 0, 0, dt, 0, 0,
 		0, 1, 0, 0, dt, 0,
@@ -484,8 +563,6 @@ kalman_t::kalman_t() : wp(0.1f), wm(0.1f)
 		0, 0, 0, 1, 0, 0,
 		0, 0, 0, 0, 1, 0,
 		0, 0, 0, 0, 0, 1;
-
-	Pk.setIdentity();
 
 	B <<
 		0.5*dt*dt, 0, 0,
@@ -500,22 +577,31 @@ kalman_t::kalman_t() : wp(0.1f), wm(0.1f)
 		0, 0, 0, 0, 1, 0,
 		0, 0, 0, 0, 0, 1;
 
+	Pk.setIdentity();
+	Pk_.setIdentity();
 	u.setZero();
+	x.setZero();
+	x_.setZero();
 }
 
-void kalman_t::update(Eigen::Vector3f pos3d)
+void kalman_t::predict()
 {
+	using namespace Eigen;
 	using namespace std::chrono;
 	auto now = steady_clock::now();
 	float elapsed = duration_cast<duration<float>>(now - time_ms).count();
 	time_ms = now;
-	
-	using namespace Eigen;
+
 	A.block(0, 3, 3, 3) = Matrix3f::Identity()*elapsed;
 	B.block(0, 0, 3, 3) = Matrix3f::Identity()*0.5*elapsed*elapsed;
 
-	Matrix<float, 6, 1>  x_ = A * x + B * u;
-	Matrix<float, 6, 6> Pk_ = A * Pk *A.transpose() + Matrix<float, 6, 6>::Identity() * wp;
+	x_ = A * x + B * u;
+	Pk_ = A * Pk *A.transpose() + Matrix<float, 6, 6>::Identity() * wp;
+}
+
+void kalman_t::correct(Eigen::Vector3f pos3d)
+{
+	using namespace Eigen;
 	Vector3f y = pos3d - C * x_;
 	Matrix3f S = C * Pk_ * C.transpose() + Matrix3f::Identity() * wm;
 	Matrix<float,6,3> K = Pk_ * C.transpose()*S.inverse();
@@ -526,5 +612,14 @@ void kalman_t::update(Eigen::Vector3f pos3d)
 
 void kalman_t::getLinearAcc(Eigen::Quaternionf qrot, Eigen::Vector3f Gravity, Eigen::Vector3f accelerometer)
 {
-	u = qrot.conjugate()._transformVector(accelerometer) - Gravity;
+	using namespace Eigen;
+
+	Vector3f rotA = (qrot)._transformVector(accelerometer);
+	Vector3f u_ = rotA - Gravity;
+
+	u = Vector3f(
+		HPF[0].update(u_(0)),
+		HPF[1].update(u_(1)),
+		HPF[2].update(u_(2)));
 }
+

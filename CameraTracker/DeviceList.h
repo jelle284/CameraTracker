@@ -7,6 +7,8 @@
 #include "HandController.h"
 #include "viewer.h"
 #include "DlgHandController.h"
+#include "DlgSettings.h"
+
 
 #define USE_PS3EYEDRIVER
 
@@ -17,8 +19,6 @@ bool
 bRunning = false,
 bCameraConnected = false,
 bRotationOnly = false, 
-bCheckBox[2] = { false },
-bDataLogging = false,
 bLEDToggleState[DEVICE_COUNT] = { false };
 
 std::vector<TrackedObject*> 
@@ -37,12 +37,6 @@ CameraList;
 MySocket 
 SocketHost;
 
-// Connections dialog box
-std::wstring
-g_ip1,
-g_ip2,
-g_com;
-
 
 // Filtering dialog
 float svalues[3] = {
@@ -52,30 +46,21 @@ float svalues[3] = {
 // Camera dialog
 int camera_count = 0;
 
+/* viewer */
+
+
+/* Dialogs */
+DlgHandController dlgHandController(&SocketHost);
+DlgSettings dlgSettings(&SocketHost);
+
+/* camera tracking thread */
+bool cameraHealth;
+std::thread* pCamThread;
+
 // some functions
 // ================
 
-/*	inputs: string
-	returns: wstring
-*/
-std::wstring s2ws(const std::string& str)
-{
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
 
-	return converterX.from_bytes(str);
-}
-
-/*	inputs: wstring
-	returns: string
-*/
-std::string ws2s(const std::wstring& wstr)
-{
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-
-	return converterX.to_bytes(wstr);
-}
 
 /*
 Handshake routine
@@ -87,26 +72,17 @@ void DeviceManager() {
 		DeviceList.push_back(&HMD);
 
 	SocketHost.FindControllers();
-	if (!bCheckBox[0]) {
+	if (!dlgSettings.CheckBoxes[0]) {
 		if (SocketHost.IdStatus[DEVICE_TAG_RIGHT_HAND_CONTROLLER])
 			DeviceList.push_back(&RHController);
 	}
-	if (!bCheckBox[1]) {
+	if (!dlgSettings.CheckBoxes[1]) {
 
 		if (SocketHost.IdStatus[DEVICE_TAG_LEFT_HAND_CONTROLLER])
 			DeviceList.push_back(&LHController);
 	}
 	for (auto & device : DeviceList)
 		device->ToggleLED(true);
-}
-
-/*
-Read from settings dialog
-*/
-void SettingsManager() {
-	SocketHost.SetIP(DEVICE_TAG_LEFT_HAND_CONTROLLER, ws2s(g_ip2).c_str());
-	SocketHost.SetIP(DEVICE_TAG_RIGHT_HAND_CONTROLLER, ws2s(g_ip1).c_str());
-	HMD.ChangeCOM(g_com);
 }
 
 // Send lens distortion parameters to openVR
@@ -167,19 +143,20 @@ void UpdatePose(TrackedObject* pDevice) {
 	}
 }
  
-/* viewer */
-std::vector<cam_ctx> Cam_ctx;
-viewer Viewer;
 
-/* Dialogs */
-DlgHandController dlgHandController(&SocketHost);
-
-/* camera tracking thread */
-bool cameraHealth; // not working
-
-std::thread* pCamThread;
 
 void cameraThread() {
+	// INIT
+	viewer Viewer;
+	std::vector<cam_ctx> Cam_ctx;
+	for (auto & cam : CameraList) {
+		cam_ctx ctx;
+		cv::Rodrigues(cam->GetSettings().RotMat.t(), ctx.rv);
+		ctx.tv = -cam->GetSettings().RotMat.t()*cam->GetSettings().Tvec;
+		ctx.cm = cam->GetSettings().CamMat.inv();
+		Cam_ctx.push_back(ctx);
+	}
+	// LOOP
 	while (bRunning) {
 		std::vector<cv::Mat> images;
 		for (auto & cam : CameraList)
@@ -187,19 +164,15 @@ void cameraThread() {
 
 		Viewer.clear();
 		for (auto & device : DeviceList) {
+			//device->kf.predict();
 			float x, y, z;
 			for (int i = 0; i < std::min(images.size(), CameraList.size()); ++i) {
 				{
 					if (CameraList[i]->DetectObject(Cam_ctx.at(i).pixel, device->m_tag, images.at(i))) {
-						//std::vector<cv::Point2f> in, out;
-						//in.push_back(Cam_ctx.at(i).pixel);
-						//cv::undistortPoints(in, out, CameraList[i]->GetSettings().CamMat,
-						//	CameraList[i]->GetSettings().DistCoef);
-						//Cam_ctx.at(i).pixel = out[0];
 						Viewer.drawPixel(Cam_ctx.at(i));
 						device->kf.getPos(&x, &y, &z);
 						auto pos = Viewer.getPPD(Cam_ctx[i], cv::Point3d(x, y, z));
-						device->kf.update(Eigen::Vector3f(pos.x, pos.y, pos.z));
+						device->kf.correct(Eigen::Vector3f(pos.x, pos.y, pos.z));
 					}
 				}
 			}
@@ -222,6 +195,8 @@ void cameraThread() {
 		cameraHealth = true;
 		cv::waitKey(10);
 	}
+	// DESTROY
+	cv::destroyWindow("camera tracking");
 }
 
 /* Fill entries in camera list */
