@@ -37,7 +37,7 @@ public:
 		cv::Size imSize;
 		settings_t() :
 			imSize(cv::Size(CAMERA_DEFAULT_WIDTH, CAMERA_DEFAULT_HEIGHT)),
-			fps(30), gain(20), exposure(30)
+			fps(60), gain(20), exposure(30)
 		{
 			using namespace cv;
 			RotMat = Mat::eye(3, 3, CV_64F);

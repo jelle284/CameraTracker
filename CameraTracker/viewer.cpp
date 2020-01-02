@@ -224,7 +224,7 @@ viewer::viewer() : zoomdist(2.0), focallen(600)
 	using namespace cv;
 	double* cm_ = new double[9]{ focallen, 0, focallen / 2, 0, focallen, focallen / 2, 0, 0, 1 };
 	double* tv_ = new double[3]{ 0, 0, zoomdist };
-	double* rv_ = new double[3]{ 0, 0.0, 0.0 };
+	double* rv_ = new double[3]{ 0.0, 0.0, 0.0 };
 	m_cm = Mat(3, 3, CV_64F, cm_);
 	m_tv = Mat(3, 1, CV_64F, tv_);
 	m_rv = Mat(3, 1, CV_64F, rv_);
@@ -258,6 +258,33 @@ cv::Mat viewer::getAngles()
 	double scale = 0.01;
 	/* simpel */
 	Mat ang = (Mat_<double>(3, 1) << scale * mousectx.now.y, scale * mousectx.now.x, 0);
-
 	return ang;
 }
+
+void coordinate_sys::project(cv::Mat & im, cv::Mat rv, cv::Mat tv, cv::Mat cm, cv::Mat dc)
+{
+	using namespace cv;
+	std::vector<Point3d> unit_sys, Tips;
+	unit_sys.push_back(Point3d(0, 0, 0));
+	unit_sys.push_back(Point3d(unit_len, 0, 0));
+	unit_sys.push_back(Point3d(0, unit_len, 0));
+	unit_sys.push_back(Point3d(0, 0, unit_len));
+	Mat rmat;
+	Rodrigues(rv, rmat);
+	for (auto & axis : unit_sys) {
+		Mat ax = rmat * Mat(axis) + tv;
+		Tips.push_back(Point3d(ax));
+	}
+	std::vector<Point2d> tips;
+	projectPoints(Tips, rv, tv, cm, dc, tips);
+
+	std::vector<std::string> texts;
+	texts.push_back(std::string("X"));
+	texts.push_back(std::string("Y"));
+	texts.push_back(std::string("Z"));
+
+	for (int i = 1; i < tips.size(); ++i) {
+		arrowedLine(im, tips.at(0), tips.at(i), Scalar(255, 0, 255), thick);
+		cv::putText(im, texts.at(i - 1), tips.at(i), FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255, 255, 255), thick);
+	}
+};

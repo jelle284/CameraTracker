@@ -85,7 +85,7 @@ int MySocket::Read(DeviceTag_t tag, char* buffer, int nbChar)
 std::string MySocket::FindControllers()
 {
 	std::stringstream ss;
-	char message[2] = { 0x30, 0x00 };
+	char message[4] = { 0x01, 0x2f, 8, 0 };
 	sendto(s_broadcast, message, sizeof(message), 0, (sockaddr*)&si_broadcast, sizeof(si_broadcast));
 	char buf[512];
 	int slen = sizeof(sockaddr);
@@ -134,7 +134,7 @@ void MySocket::flush(DeviceTag_t tag)
 	int i = 0;
 	while (Read(tag, waste_buffer, sizeof(waste_buffer)) > 0) {
 		Sleep(100);
-		if (++i > 2000)
+		if (++i > 1000)
 			break;
 	}
 }

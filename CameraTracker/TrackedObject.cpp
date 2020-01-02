@@ -162,12 +162,12 @@ void TrackedObject::TimerCallbackIMU()
 		}
 	}
 	else {
-		scaled_data_t scaled_data = { 0 };
-		char read_req[] = { 0x10, 0x00, 1 };
+		float scaled_data[8] = { 0 };
+		char read_req[] = { 1, 0, 8, 0 };
 
 		WriteData(read_req, sizeof(read_req));
-		if (ReadData((char*)&scaled_data, sizeof(scaled_data)) == sizeof(scaled_data)) {
-			Eigen::Quaternionf q(scaled_data.imu[9], scaled_data.imu[10], scaled_data.imu[11], scaled_data.imu[12]);
+		if (ReadData((char*)scaled_data, sizeof(scaled_data)) == sizeof(scaled_data)) {
+			Eigen::Quaternionf q(scaled_data[0], scaled_data[1], scaled_data[2], scaled_data[3]);
 			qn = q_zero * q;
 
 			m_pose.q[0] = qn.w();
@@ -175,13 +175,13 @@ void TrackedObject::TimerCallbackIMU()
 			m_pose.q[2] = qn.y();
 			m_pose.q[3] = qn.z();
 
-			kf.predict();
-			kf.update();
-			kf.getLinearAcc(qn, Gravity, 
-				Eigen::Vector3f(
-					scaled_data.imu[0],
-					scaled_data.imu[1],
-					scaled_data.imu[2]));
+			//kf.predict();
+			//kf.update();
+			//kf.getLinearAcc(qn, Gravity, 
+			//	Eigen::Vector3f(
+			//		scaled_data.imu[0],
+			//		scaled_data.imu[1],
+			//		scaled_data.imu[2]));
 
 			if (m_bZero) {
 				q_zero = q.conjugate();
@@ -190,9 +190,9 @@ void TrackedObject::TimerCallbackIMU()
 
 			// buttons
 			for (auto ax = 0; ax < ANALOG_COUNT; ++ax)
-				m_buttons.axis[ax] = scaled_data.analogs[ax];
+				m_buttons.axis[ax] = scaled_data[4+ax];
 			for (auto btn = 0; btn < BUTTON_COUNT; ++btn)
-				m_buttons.ButtonState[btn] = (scaled_data.buttons == (btn + 1));
+				m_buttons.ButtonState[btn] = (*((int16_t*)scaled_data + 14) == (btn + 1));
 		}
 	}
 	
@@ -617,9 +617,10 @@ void kalman_t::getLinearAcc(Eigen::Quaternionf qrot, Eigen::Vector3f Gravity, Ei
 	Vector3f rotA = (qrot)._transformVector(accelerometer);
 	Vector3f u_ = rotA - Gravity;
 
-	u = Vector3f(
-		HPF[0].update(u_(0)),
-		HPF[1].update(u_(1)),
-		HPF[2].update(u_(2)));
+	//u = Vector3f(
+	//	HPF[0].update(u_(0)),
+	//	HPF[1].update(u_(1)),
+	//	HPF[2].update(u_(2)));
+	u = u_;
 }
 

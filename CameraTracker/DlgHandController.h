@@ -6,8 +6,11 @@
 class DlgHandController
 {
 	MySocket* pSocket;
-	int16_t adc_buffer[4], btn_limits[8], analog_limits[6];
+	int16_t adc_buffer[4], calib_buffer[16];
 	DeviceTag_t m_tag;
+	const uint8_t button_start;
+	int16_t analogFromAdcBuffer(AnalogTag_t analog);
+	
 public:
 	DlgHandController(MySocket* Host);
 	~DlgHandController();
@@ -28,10 +31,13 @@ public:
 	void capButton(ButtonTag_t button, int16_t spread);
 	void setRangeMin(AnalogTag_t analog, int16_t value);
 	void setRangeMax(AnalogTag_t analog, int16_t value);
+	void setRangeMid(AnalogTag_t analog, int16_t value);
 	int16_t getRangeMin(AnalogTag_t analog);
 	int16_t getRangeMax(AnalogTag_t analog);
+	int16_t getRangeMid(AnalogTag_t analog);
 	void capRangeMin(AnalogTag_t analog);
 	void capRangeMax(AnalogTag_t analog);
+	void capRangeMid(AnalogTag_t analog);
 	
 	std::wstring print_raw();
 };

@@ -1,8 +1,10 @@
 #include "stdafx.h"
-#include "DlgSettings.h"
+#include "Dialogs.h"
 #include "resource.h"
 #include "string_conversion.h"
+#include "TrackedObject.h"
 
+// class functions
 DlgSettings::DlgSettings(MySocket* Host) : 
 	m_com(L"COM3"), m_tag(DEVICE_TAG_HMD), pSocket(Host)
 {
@@ -39,13 +41,45 @@ void DlgSettings::getScaledData()
 
 }
 
+
+void DlgSettings::zeroDevice()
+{
+	char buffer[12];
+	memset(buffer, 0, sizeof(buffer));
+	buffer[0] = 1;
+	buffer[1] = 34;
+	buffer[2] = 2;
+	this->pSocket->Send(m_tag, buffer, 4);
+	this->pSocket->Read(m_tag, (buffer + 4), sizeof(buffer) - 4);
+	buffer[0] = 2;
+	buffer[1] = 32;
+	this->pSocket->Send(m_tag, buffer, sizeof(buffer));
+}
+
+// callback
+
 INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	extern std::vector<TrackedObject*> DeviceList;
 	extern DlgSettings dlgSettings;
 	extern HINSTANCE hInst;
 	extern HeadMountDisplay HMD;
 	extern HandController RHController, LHController;
 	extern MySocket SocketHost;
+	extern DlgHandController dlgHandController;
+
+
+	auto getFirstActiveDevice = [](HWND hDlg) {
+		LRESULT active_idx = 0;
+		if (DeviceList.size() > 0) {
+			active_idx = DeviceList[0]->m_tag;
+			SendDlgItemMessage(hDlg, IDC_COMBO_SELECT, CB_SETCURSEL, active_idx, 0);
+		}
+		else {
+			EnableWindow(GetDlgItem(hDlg, IDC_COMBO_SELECT), false);
+		}
+		return active_idx;
+	};
 
 	std::list<int> disable_btns = {
 		IDC_BTN_CALIB_ADC,
@@ -62,6 +96,9 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 	
 	TrackedObject* device = nullptr;
 	switch (active_idx) {
+	case DEVICE_TAG_HMD:
+		device = &HMD;
+		break;
 	case DEVICE_TAG_LEFT_HAND_CONTROLLER:
 		device = &LHController;
 		break;
@@ -97,8 +134,7 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 		ComboBox_AddString(GetDlgItem(hDlg, IDC_COMBO_SELECT), HMD.PrintTag().c_str());
 		ComboBox_AddString(GetDlgItem(hDlg, IDC_COMBO_SELECT), RHController.PrintTag().c_str());
 		ComboBox_AddString(GetDlgItem(hDlg, IDC_COMBO_SELECT), LHController.PrintTag().c_str());
-		active_idx = 0;
-		SendDlgItemMessage(hDlg, IDC_COMBO_SELECT, CB_SETCURSEL, active_idx, 0);
+		active_idx = getFirstActiveDevice(hDlg);
 		for (auto & btn : disable_btns)
 			EnableWindow(GetDlgItem(hDlg, btn), SocketHost.IdStatus[active_idx]);
 
@@ -186,6 +222,7 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 						SocketHost.getIP(DEVICE_TAG_LEFT_HAND_CONTROLLER));
 					SetDlgItemText(hDlg, IDC_STATIC_LH, L"OK");
 				}
+				
 			}
 			catch (std::exception e) {
 				SetDlgItemText(hDlg, IDC_STATIC_STEAM, s2ws(e.what()).c_str());
@@ -202,7 +239,9 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
 		case IDC_TOGGLE_LED:
 			try {
-				char write_buf[6] = { 0x20, 0x00, 3, 0, 0, 0 };
+				char write_buf[] = { 2, 44, 2, 0,
+					0, 0, 0, 0,
+					0, 0, 0, 0 };
 				SocketHost.Send((DeviceTag_t)active_idx, write_buf, sizeof(write_buf));
 			}
 			catch (std::exception e) {
@@ -235,7 +274,12 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 			return (INT_PTR)TRUE;
 
 		case IDC_BTN_CALIB_ADC:
+			dlgHandController.activate((DeviceTag_t)active_idx);
+			DialogBox(hInst, MAKEINTRESOURCE(IDD_HANDCONTROL), hDlg, cb_DlgHandController);
+			return (INT_PTR)TRUE;
 
+		case IDC_DEV_ZERO:
+			dlgSettings.zeroDevice();
 			return (INT_PTR)TRUE;
 
 		case IDC_BTN_CALIB_MAG:
@@ -273,10 +317,11 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDC_BTN_COMMIT:
 			for (int i = DEVICE_TAG_RIGHT_HAND_CONTROLLER; i < DEVICE_COUNT; ++i) {
 				if (!SocketHost.IdStatus[i]) continue;
-				char commit_req[3] = { 0x50, 0x00, 0 };
+				char commit_req[4] = { 5, 0, 0, 0 };
 				SocketHost.Send((DeviceTag_t)i, commit_req, sizeof(commit_req));
 			}
 			return (INT_PTR)TRUE;
+
 		} // switch (LOWORD(wParam))
 	case WM_HSCROLL:
 		if (LOWORD(wParam) == SB_ENDSCROLL) {
@@ -299,7 +344,9 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
 			SetDlgItemText(hDlg, IDC_STATIC_STEAM, wss.str().c_str());
 
-			char write_buf[6] = { 0x20, 0x00, 3, r, g, b };
+			char write_buf[] = { 2, 44, 2, 0,
+				r, 0, g, 0,
+				b, 0, 0, 0 };
 			SocketHost.Send((DeviceTag_t)active_idx, write_buf, sizeof(write_buf));
 		}
 	case WM_TIMER:
@@ -315,39 +362,31 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 				try {
 					std::wstringstream wss;
 					wss.precision(2);
-					char req[3] = { 0x10, 0x00, 0x00 };
-					scaled_data_t sensorbuf = { 0 };
+					char req[3] = { 0x01, 0x00, 17 };
+					float sensorbuf[17];
 					SocketHost.Send((DeviceTag_t)active_idx, req, sizeof(req));
 					int br = SocketHost.Read((DeviceTag_t)active_idx, (char*)&sensorbuf, sizeof(sensorbuf));
 					wss << br << " bytes read. ";
-					wss << "mpu:\n";
-					for (int j = 0; j < 3; ++j) {
-						for (int i = 0; i < 3; ++i) {
-							wss << std::fixed << sensorbuf.imu[3 * j + i] << "\t\t";
-						}
-						wss << "\n";
-					}
 					wss << "quaternion:\n";
 					for (int i = 0; i < 4; ++i)
-						wss << std::fixed << sensorbuf.imu[9 + i] << "\t\t";
-					wss << "\n";;
+						wss << std::fixed << sensorbuf[i] << "\t\t";
+					wss << "\n";
 					wss << "Linear acceleration:\n";
-					auto q = Eigen::Quaternionf(sensorbuf.imu[9], sensorbuf.imu[10], sensorbuf.imu[11], sensorbuf.imu[12]);
-					auto acc = Eigen::Vector3f(sensorbuf.imu[0], sensorbuf.imu[1], sensorbuf.imu[2]);
+					auto q = Eigen::Quaternionf(sensorbuf[0], sensorbuf[1], sensorbuf[2], sensorbuf[3]);
+					auto acc = Eigen::Vector3f(sensorbuf[8], sensorbuf[9], sensorbuf[10]);
 					Eigen::Vector3f linacc = (device->q_zero * q)._transformVector(acc);
 					linacc -= device->Gravity;
 					for (int i = 0; i < 3; ++i) {
 						float fval = dlgSettings.HPF[i].update(linacc(i));
 						wss << std::fixed << fval << "\t\t";
 					}
-						
 					wss << "\n";
 
 					wss << "adc:\n";
 					for (int i = 0; i < 3; ++i) {
-						wss << std::fixed << sensorbuf.analogs[i] << "\t";
+						wss << std::fixed << sensorbuf[4+i] << "\t";
 					}
-					wss << "buttons: " << sensorbuf.buttons;
+					wss << "buttons: " << *((int16_t*)(sensorbuf+7));
 					SetDlgItemText(hDlg, IDC_STATIC_STEAM, wss.str().c_str());
 				}
 				catch (std::exception e) {
@@ -360,18 +399,18 @@ INT_PTR CALLBACK Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 			if (SendMessage(GetDlgItem(hDlg, IDC_CHECK_RAW), BM_GETCHECK, 0, 0)) {
 				try {
 					std::wstringstream wss;
-					char req[3] = { 0x12, 0x00, 13 };
-					int16_t sensorbuf[13] = { 0 };
+					char req[3] = { 1, 36, 8 };
+					int16_t sensorbuf[16] = { 0 };
 					SocketHost.Send((DeviceTag_t)active_idx, req, sizeof(req));
 					int br = SocketHost.Read((DeviceTag_t)active_idx, (char*)&sensorbuf, sizeof(sensorbuf));
 					wss << br << " bytes read.\n";
 					for (int i = 0; i < 3; ++i) {
 						for (int j = 0; j < 3; ++j)
-							wss << sensorbuf[3 * i + j] << "\t";
+							wss << sensorbuf[4 * i + j] << "\t";
 						wss << std::endl;
 					}
 					for (int i = 0; i < 4; ++i)
-						wss << sensorbuf[9 + i] << "\t";
+						wss << sensorbuf[12 + i] << "\t";
 
 					SetDlgItemText(hDlg, IDC_STATIC_STEAM, wss.str().c_str());
 				}

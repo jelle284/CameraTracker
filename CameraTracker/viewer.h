@@ -7,14 +7,32 @@ struct cam_ctx {
 	cv::Point pixel;
 };
 
-struct mouse_ctx {
-	bool is_dragging, release_event;
-	cv::Point2d m_start, m_distance, m_acum, now;
+
+
+class viewable {
+public:
+	virtual void project(cv::Mat &im, cv::Mat rv, cv::Mat tv, cv::Mat cm, cv::Mat dc) = 0;
 };
 
+class coordinate_sys : public viewable {
+	const double unit_len;
+	const int thick;
+public:
+	coordinate_sys(double unit_len = 1.0, int thick = 2) :
+		unit_len(unit_len), thick(thick) {}
+	void project(cv::Mat &im, cv::Mat rv, cv::Mat tv, cv::Mat cm, cv::Mat dc) override;
+};
+
+class pixel_ray : public viewable {
+
+};
 class viewer
 {
 	double zoomdist, focallen;
+	struct mouse_ctx {
+		bool is_dragging, release_event;
+		cv::Point2d m_start, m_distance, m_acum, now;
+	};
 	mouse_ctx mousectx;
 	cv::Mat m_canvas, m_cm, m_tv, m_rv, m_dc;
 	static void on_mouse(int e, int x, int y, int d, void *ptr);

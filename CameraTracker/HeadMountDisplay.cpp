@@ -52,12 +52,14 @@ std::wstring HeadMountDisplay::PrintRawData()
 
 int HeadMountDisplay::ReadData(char * buffer, unsigned int nbChar)
 {
+	if (!pCOM) return -1;
 	int res = pCOM->ReadData(buffer, nbChar);
 	return res;
 }
 
 bool HeadMountDisplay::WriteData(const char * buffer, unsigned int nbChar)
 {
+	if (!pCOM) return -1;
 	bool res = pCOM->WriteData(buffer, nbChar);
 	return res;
 }

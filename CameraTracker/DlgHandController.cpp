@@ -3,7 +3,7 @@
 #include "resource.h"
 
 DlgHandController::DlgHandController(MySocket* Host) : 
-	pSocket(Host)
+	pSocket(Host), button_start(8)
 {
 	memset(adc_buffer, 0, sizeof(adc_buffer));
 }
@@ -20,8 +20,8 @@ void DlgHandController::activate(DeviceTag_t tag)
 
 void DlgHandController::captureOnce()
 {
-	char read_req[3] = { 0x12, 0x09, 4 };
-	pSocket->Send(m_tag, read_req, 3);
+	char read_req[4] = { 0x01, 0x2a, 4, 0 };
+	pSocket->Send(m_tag, read_req, sizeof(read_req));
 	pSocket->Read(
 		m_tag,
 		(char*)(adc_buffer),
@@ -32,20 +32,21 @@ void DlgHandController::captureOnce()
 void DlgHandController::_setValues(char FC, char ADDR, char LEN, int16_t* data)
 {
 	// send
-	char write_req[3] = { FC, ADDR, LEN };
+	char write_req[4] = { FC, ADDR, LEN, 0 };
 	char *write_buf;
-	write_buf = (char*) malloc(3 + 2*LEN);
-	memcpy(write_buf, write_req, 3);
-	memcpy(write_buf + 3, data, 2*LEN);
-	pSocket->Send(m_tag, write_buf, 3 + 2*LEN);
+	write_buf = (char*) malloc(sizeof(write_req) + 4*LEN);
+	memcpy(write_buf, write_req, sizeof(write_req));
+	memcpy(write_buf + sizeof(write_req), data, 4*LEN);
+	pSocket->Send(m_tag, write_buf, sizeof(write_req) + 4*LEN);
+	Sleep(50);
 	free(write_buf);
 }
 
 void DlgHandController::_getValues(char FC, char ADDR, char LEN, int16_t* buffer)
 {
-	char read_req[3] = { FC, ADDR, LEN };
+	char read_req[4] = { FC, ADDR, LEN, 0 };
 	pSocket->Send(m_tag, read_req, sizeof(read_req));
-	pSocket->Read(m_tag, (char*)buffer, LEN);
+	pSocket->Read(m_tag, (char*)buffer, 4*LEN);
 }
 
 void DlgHandController::flush()
@@ -56,86 +57,130 @@ void DlgHandController::flush()
 
 void DlgHandController::upload_to()
 {
-	_setValues(0x21, 0x20, 6, analog_limits);
-	Sleep(100);
-	_setValues(0x21, 0x50, 8, btn_limits);
+	//flush();
+	_setValues(2, 24, 8, calib_buffer);
 }
 
 void DlgHandController::download_from()
 {
-	flush();
+	//flush();
+	_getValues(1, 24, 8, calib_buffer);
 
-	_getValues(0x11, 0x20, 6, analog_limits);
+}
 
-	flush();
-
-	_getValues(0x11, 0x50, 8, btn_limits);
-
+int16_t DlgHandController::analogFromAdcBuffer(AnalogTag_t analog)
+{
+	switch (analog) {
+	case ANALOG_TAG_X:
+		return adc_buffer[0];
+	case ANALOG_TAG_Y:
+		return adc_buffer[1];
+	case ANALOG_TAG_TRIGGER:
+		return adc_buffer[2];
+	}
 }
 
 // dlg functions
 
 void DlgHandController::setButton(ButtonTag_t button, int16_t value, int16_t spread = 200)
 {
-	btn_limits[2 * button] = value - spread;
-	btn_limits[2 * button + 1] = value + spread;
+	calib_buffer[2 * button + button_start] = value - spread;
+	calib_buffer[2 * button + button_start + 1] = value + spread;
 }
 int16_t DlgHandController::getButton(ButtonTag_t button)
 {
-	return (btn_limits[2 * button] + btn_limits[2 * button + 1]) / 2;
+	return (calib_buffer[2 * button + button_start] + calib_buffer[2 * button + button_start + 1]) / 2;
 }
 void DlgHandController::capButton(ButtonTag_t button, int16_t spread = 200)
 {
-	captureOnce();
-	int16_t value = adc_buffer[3];
-	btn_limits[2 * button] = value - spread;
-	btn_limits[2 * button + 1] = value + spread;
+	auto value = adc_buffer[3];
+	calib_buffer[2 * button + button_start] = value - spread;
+	calib_buffer[2 * button + button_start + 1] = value + spread;
 }
 void DlgHandController::setRangeMin(AnalogTag_t analog, int16_t value)
 {
-	analog_limits[2 * analog] = value;
+	switch (analog) {
+	case ANALOG_TAG_X:
+		calib_buffer[0] = value;
+		break;
+	case ANALOG_TAG_Y:
+		calib_buffer[1] = value;
+		break;
+	case ANALOG_TAG_TRIGGER:
+		calib_buffer[6] = value;
+		break;
+	}
 }
 void DlgHandController::setRangeMax(AnalogTag_t analog, int16_t value)
 {
-	analog_limits[2 * analog + 1] = value;
+	switch (analog) {
+	case ANALOG_TAG_X:
+		calib_buffer[2] = value;
+		break;
+	case ANALOG_TAG_Y:
+		calib_buffer[3] = value;
+		break;
+	case ANALOG_TAG_TRIGGER:
+		calib_buffer[7] = value;
+		break;
+	}
+}
+void DlgHandController::setRangeMid(AnalogTag_t analog, int16_t value)
+{
+	switch (analog) {
+	case ANALOG_TAG_X:
+		calib_buffer[4] = value;
+		break;
+	case ANALOG_TAG_Y:
+		calib_buffer[5] = value;
+		break;
+	}
 }
 int16_t DlgHandController::getRangeMin(AnalogTag_t analog)
 {
-	return analog_limits[2 * analog];
+	switch (analog) {
+	case ANALOG_TAG_X:
+		return calib_buffer[0];
+	case ANALOG_TAG_Y:
+		return calib_buffer[1];
+	case ANALOG_TAG_TRIGGER:
+		return calib_buffer[6];
+	}
+	return 0;
 }
 int16_t DlgHandController::getRangeMax(AnalogTag_t analog)
 {
-	return analog_limits[2 * analog + 1];
+	switch (analog) {
+	case ANALOG_TAG_X:
+		return calib_buffer[2];
+	case ANALOG_TAG_Y:
+		return calib_buffer[3];
+	case ANALOG_TAG_TRIGGER:
+		return calib_buffer[7];
+	}
+	return 0;
+}
+int16_t DlgHandController::getRangeMid(AnalogTag_t analog)
+{
+	switch (analog) {
+	case ANALOG_TAG_X:
+		return calib_buffer[4];
+	case ANALOG_TAG_Y:
+		return calib_buffer[5];
+	}
+	return 0;
 }
 void DlgHandController::capRangeMin(AnalogTag_t analog)
 {
-	auto index = 2 * analog;
-	switch (analog) {
-	case ANALOG_TAG_X:
-		analog_limits[index] = adc_buffer[0];
-		break;
-	case ANALOG_TAG_Y:
-		analog_limits[index] = adc_buffer[1];
-		break;
-	case ANALOG_TAG_TRIGGER:
-		analog_limits[index] = adc_buffer[2];
-		break;
-	}
+	setRangeMin(analog, analogFromAdcBuffer(analog));
 }
 void DlgHandController::capRangeMax(AnalogTag_t analog)
 {
-	auto index = 2 * analog + 1;
-	switch (analog) {
-	case ANALOG_TAG_X:
-		analog_limits[index] = adc_buffer[0];
-		break;
-	case ANALOG_TAG_Y:
-		analog_limits[index] = adc_buffer[1];
-		break;
-	case ANALOG_TAG_TRIGGER:
-		analog_limits[index] = adc_buffer[2];
-		break;
-	}
+	setRangeMax(analog, analogFromAdcBuffer(analog));
+}
+void DlgHandController::capRangeMid(AnalogTag_t analog)
+{
+	setRangeMid(analog, analogFromAdcBuffer(analog));
 }
 std::wstring DlgHandController::print_raw()
 {
@@ -281,6 +326,8 @@ INT_PTR CALLBACK cb_DlgHandController(HWND hDlg, UINT message, WPARAM wParam, LP
 
 		case IDC_BTN_TRIG_UP:
 			dlgHandController.capRangeMin(ANALOG_TAG_TRIGGER);
+			dlgHandController.capRangeMid(ANALOG_TAG_X);
+			dlgHandController.capRangeMid(ANALOG_TAG_Y);
 			SetDlgItemText(
 				hDlg,
 				IDC_EDT_TRIG_UP,

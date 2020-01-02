@@ -5,9 +5,12 @@
 class LibPSEye :
 	public camera
 {
+	std::mutex mtx;
 	bool init_ok, is_running;
 	ps3eye::PS3EYECam::PS3EYERef m_eye;
 	unsigned char* videoFrame;
+	void CapThread();
+	cv::Mat im;
 public:
 	LibPSEye(ps3eye::PS3EYECam::PS3EYERef eye, int file_id);
 	

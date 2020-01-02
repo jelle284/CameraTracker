@@ -168,6 +168,8 @@
     <ClInclude Include="CameraTracker.h" />
     <ClInclude Include="DataLogger.h" />
     <ClInclude Include="DeviceList.h" />
+    <ClInclude Include="Dialogs.h" />
+    <ClInclude Include="DlgCameraSettings.h" />
     <ClInclude Include="DlgHandController.h" />
     <ClInclude Include="DlgSettings.h" />
     <ClInclude Include="HandController.h" />
@@ -184,6 +186,7 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TrackedObject.h" />
     <ClInclude Include="Tracking_api.h" />
+    <ClInclude Include="tracking_main.h" />
     <ClInclude Include="tracking_math.h" />
     <ClInclude Include="UKF.h" />
     <ClInclude Include="viewer.h" />
@@ -192,6 +195,7 @@
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CameraTracker.cpp" />
     <ClCompile Include="DataLogger.cpp" />
+    <ClCompile Include="DlgCameraSettings.cpp" />
     <ClCompile Include="DlgHandController.cpp" />
     <ClCompile Include="DlgSettings.cpp" />
     <ClCompile Include="HandController.cpp" />
@@ -209,6 +213,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="TrackedObject.cpp" />
+    <ClCompile Include="tracking_main.cpp" />
     <ClCompile Include="tracking_math.cpp" />
     <ClCompile Include="UKF.cpp" />
     <ClCompile Include="viewer.cpp" />

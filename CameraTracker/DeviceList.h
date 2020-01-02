@@ -6,9 +6,7 @@
 #include "HeadMountDisplay.h"
 #include "HandController.h"
 #include "viewer.h"
-#include "DlgHandController.h"
-#include "DlgSettings.h"
-
+#include "Dialogs.h"
 
 #define USE_PS3EYEDRIVER
 
@@ -46,12 +44,10 @@ float svalues[3] = {
 // Camera dialog
 int camera_count = 0;
 
-/* viewer */
-
-
 /* Dialogs */
 DlgHandController dlgHandController(&SocketHost);
 DlgSettings dlgSettings(&SocketHost);
+DlgCameraSettings dlgCameraSettings();
 
 /* camera tracking thread */
 bool cameraHealth;
@@ -63,9 +59,9 @@ std::thread* pCamThread;
 
 
 /*
-Handshake routine
+Search for devices and put in device list
 */
-void DeviceManager() {
+void UpdateList() {
 	DeviceList.clear();
 
 	if (HMD.HandShake())
@@ -164,7 +160,7 @@ void cameraThread() {
 
 		Viewer.clear();
 		for (auto & device : DeviceList) {
-			//device->kf.predict();
+			device->kf.predict();
 			float x, y, z;
 			for (int i = 0; i < std::min(images.size(), CameraList.size()); ++i) {
 				{

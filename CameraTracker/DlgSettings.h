@@ -21,6 +21,7 @@ public:
 	~DlgSettings();
 
 	void viewIMU();
+	void zeroDevice();
 	void getScaledData();
 
 	std::wstring getCom() { return m_com; }

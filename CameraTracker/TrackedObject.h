@@ -16,7 +16,7 @@ enum eLED_COLOR {
 class HighPassFilter {
 	float x_prev, y_prev, alpha, sensor_lim;
 public:
-	HighPassFilter(float cut_off = 1.0f, float sample_time = 0.010) :
+	HighPassFilter(float cut_off = 0.1f, float sample_time = 0.020) :
 		x_prev(0.0f), y_prev(0.0f), sensor_lim(2 * 9.81f)
 	{
 		alpha = 1.0f / (2 * M_PI*sample_time*cut_off + 1);
